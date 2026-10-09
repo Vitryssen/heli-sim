@@ -76,8 +76,6 @@ export const params = {
     hoverKi: 0.025,
     altitudeGain: 1.0,
     maxHoldClimb: 3,
-    brakeGain: 0.45,
-    brakeMaxG: 0.3,
     envelopePitch: 0.61,     // 35°
     envelopeRoll: 0.87,      // 50°
     headingGain: 2,

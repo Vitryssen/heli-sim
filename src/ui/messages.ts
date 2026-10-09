@@ -1,4 +1,4 @@
-import type { Notice } from '../game/mission';
+import type { Notice } from '../game/landings';
 
 /** Centre-screen banner. A ttl of 0 keeps it up until replaced (crashes). */
 export class Messages {

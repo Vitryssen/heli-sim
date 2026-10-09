@@ -10,14 +10,22 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "server": "tsx watch server/index.ts",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --target=node22 --format=cjs --outfile=server/dist/index.cjs --external:bufferutil --external:utf-8-validate --log-override:empty-import-meta=silent",
+    "start:server": "HELI_SERVER_MAIN=1 node server/dist/index.cjs"
   },
   "dependencies": {
-    "three": "0.169.0"
+    "three": "0.169.0",
+    "ws": "8.18.0"
   },
   "devDependencies": {
+    "@types/node": "22.9.0",
     "@types/three": "0.169.0",
+    "@types/ws": "8.5.13",
+    "esbuild": "0.21.5",
     "lil-gui": "0.19.2",
+    "tsx": "4.19.2",
     "typescript": "5.6.3",
     "vite": "5.4.11",
     "vitest": "2.1.8"

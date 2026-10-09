@@ -7,4 +7,6 @@ export interface WorldQuery {
   solidAt(x: number, y: number, z: number): boolean;
   /** Narrow tree checks to the neighbourhood of (x, z) before calling solidAt. */
   focus(x: number, z: number): void;
+  /** Distance along a unit direction to the first terrain, building or pad surface, or null within maxDist. Trees are ignored. */
+  raycast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxDist: number): number | null;
 }

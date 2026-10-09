@@ -6,7 +6,28 @@ import { terrainH } from './terrain';
 export function createWorld(layout: Layout): WorldQuery {
   const { pads, buildings, trees } = layout;
   let near: Tree[] = [];
+  const hard = (x: number, y: number, z: number): boolean => {
+    if (y < terrainH(x, z)) return true;
+    for (const b of buildings) if (y < b.top && y > b.base && Math.abs(x - b.x) < b.hw && Math.abs(z - b.z) < b.hd) return true;
+    for (const p of pads) if (y < p.top && y > p.top - p.thick && (x - p.x) ** 2 + (z - p.z) ** 2 < p.r * p.r) return true;
+    return false;
+  };
   return {
+    raycast(ox, oy, oz, dx, dy, dz, maxDist) {
+      // march in 6 m steps, then bisect the step that went solid
+      const STEP = 6;
+      let prev = 0;
+      for (let d = STEP; prev < maxDist; d += STEP) {
+        const t = Math.min(d, maxDist);
+        if (hard(ox + dx * t, oy + dy * t, oz + dz * t)) {
+          let lo = prev, hi = t;
+          for (let i = 0; i < 8; i++) { const m = (lo + hi) / 2; if (hard(ox + dx * m, oy + dy * m, oz + dz * m)) hi = m; else lo = m; }
+          return hi;
+        }
+        prev = t;
+      }
+      return null;
+    },
     terrainH,
     groundAt(x, z, y) {
       let g = terrainH(x, z);

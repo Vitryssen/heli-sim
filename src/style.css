@@ -18,6 +18,7 @@ html, body { height: 100%; margin: 0; overflow: hidden; background: var(--sky); 
 body { font-family: var(--f-label); color: var(--ink); }
 #view { position: fixed; inset: 0; }
 #view canvas { display: block; cursor: crosshair; }
+#vignette { position: fixed; inset: 0; background: radial-gradient(ellipse at 50% 45%, transparent 55%, rgba(4, 6, 8, .38) 100%); }
 .hud { pointer-events: none; }
 .hud button { pointer-events: auto; }
 .panel { background: var(--glass); border: 1px solid var(--glass-edge); border-radius: 6px; backdrop-filter: blur(6px); }
@@ -44,10 +45,27 @@ button.tg[aria-pressed="true"] { border-color: rgba(255, 181, 71, .6); }
 button.tg[aria-pressed="true"] .led { background: var(--amber); box-shadow: 0 0 8px var(--amber); }
 button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 
-#tgt { padding: 10px 14px; display: grid; grid-template-columns: auto auto; column-gap: 14px; row-gap: 4px; align-items: center; }
-#tgt .tname { font: 700 18px/1 var(--f-label); letter-spacing: .04em; text-transform: uppercase; color: var(--amber); }
-#tArrow { width: 22px; height: 22px; fill: var(--amber); }
-.tinfo { display: flex; align-items: center; gap: 6px; justify-self: end; }
+#side { display: flex; flex-direction: column; align-items: stretch; gap: 6px; width: 212px; }
+#mapWrap { position: relative; padding: 6px; border-radius: 50%; aspect-ratio: 1; box-sizing: border-box; }
+#minimap { display: block; width: 100%; height: 100%; border-radius: 50%; }
+#mapRange { position: absolute; right: 10px; bottom: 6px; color: var(--ink); text-shadow: 0 1px 2px rgba(0, 0, 0, .8); }
+.mp { padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; }
+#mpRoomName { color: var(--amber); text-transform: none; }
+#mpPing { float: right; }
+#mpList { border-collapse: collapse; font: 400 12px/1.4 var(--f-num); font-variant-numeric: tabular-nums; }
+#mpList td { padding: 0; }
+#mpList td.n { text-align: right; padding-left: 10px; color: var(--muted); }
+#mpList tr.self td:first-child { color: var(--amber); }
+#feed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font: 500 12px/1.3 var(--f-num); text-shadow: 0 1px 3px rgba(0, 0, 0, .9); }
+#feed li b { color: var(--amber); font-weight: 500; }
+#feed li.kill i { color: var(--red); font-style: normal; }
+#feed li.self { color: var(--green); }
+.roster { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font: 400 12px/1.3 var(--f-num); }
+.roster small { color: var(--muted); }
+.field { font: 400 14px/1 var(--f-num); color: var(--ink); background: rgba(0, 0, 0, .3); border: 1px solid var(--glass-edge); border-radius: 4px; padding: 8px 10px; min-width: 0; flex: 1; }
+.field:focus { outline: 2px solid var(--amber); outline-offset: 1px; }
+.card p.warn { color: var(--red); }
+.roster { font-size: 13px; }
 
 /* centre HUD */
 #hudsvg { position: fixed; left: 50%; top: 50%; width: min(600px, calc(100vw - 32px)); transform: translate(-50%, -46%); overflow: visible;
@@ -66,6 +84,27 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 #tags { position: fixed; left: 50%; top: calc(50% + min(222px, 40vw)); transform: translateX(-50%); display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; width: min(520px, calc(100vw - 32px)); }
 #tags span { font: 600 10px/1 var(--f-label); letter-spacing: .12em; padding: 3px 5px; border-radius: 3px; border: 1px solid var(--glass-edge); color: rgba(232, 238, 242, .35); background: rgba(13, 19, 25, .35); }
 #tags span.on { color: var(--green); border-color: rgba(142, 224, 166, .55); }
+
+/* weapons */
+#weapons { position: fixed; left: 50%; top: calc(50% + min(250px, 45vw)); transform: translateX(-50%); display: flex; gap: 14px; font: 500 13px/1 var(--f-num); font-variant-numeric: tabular-nums; color: rgba(232, 238, 242, .55); text-shadow: 0 1px 3px rgba(0, 0, 0, .9); }
+#weapons .on { color: var(--amber); }
+#weapons .empty { color: var(--red); }
+.aim { position: fixed; left: 0; top: 0; }
+#pipper { width: 26px; height: 26px; border: 1.5px solid var(--amber); border-radius: 50%; box-shadow: 0 0 3px rgba(0, 0, 0, .7); }
+#pipper::after { content: ""; position: absolute; left: 50%; top: 50%; width: 3px; height: 3px; margin: -1.5px; border-radius: 50%; background: var(--amber); }
+#hitMark { width: 22px; height: 22px; background:
+  linear-gradient(45deg, transparent 46%, #fff 46%, #fff 54%, transparent 54%),
+  linear-gradient(-45deg, transparent 46%, #fff 46%, #fff 54%, transparent 54%); }
+#seeker { border: 1.5px dashed rgba(255, 181, 71, .7); border-radius: 50%; }
+#lockBox { width: 54px; height: 54px; color: var(--amber); }
+#lockBox svg { width: 100%; height: 100%; overflow: visible; }
+#lockBox rect { fill: none; stroke: currentColor; stroke-width: 1.5; }
+#lockBox circle { fill: none; stroke: currentColor; stroke-width: 3; }
+#lockBox span { position: absolute; left: 50%; top: 100%; transform: translateX(-50%); margin-top: 4px; font: 700 13px/1 var(--f-label); letter-spacing: .12em; display: none; }
+#lockBox.locked { color: var(--red); }
+#lockBox.locked span { display: block; }
+#warn { position: fixed; left: 50%; top: 11%; transform: translateX(-50%); font: 700 30px/1 var(--f-label); letter-spacing: .14em; color: var(--red); text-shadow: 0 2px 8px rgba(0, 0, 0, .7); }
+#warn.blink { opacity: .25; }
 
 #msg { position: fixed; left: 50%; top: 17%; transform: translateX(-50%); text-align: center; width: min(560px, calc(100vw - 32px)); opacity: 0; transition: opacity .25s; }
 #msg.show { opacity: 1; }
@@ -105,6 +144,7 @@ button.bind.listening { border-color: var(--amber); color: var(--amber); }
 .card .go { font: 700 16px/1 var(--f-label); letter-spacing: .1em; text-transform: uppercase; color: #1a1408; background: var(--amber); border: 0; border-radius: 4px; padding: 11px 22px; cursor: pointer; }
 
 @media (max-width: 720px) {
+  #side { width: 150px; }
   .brand strong { font-size: 18px; }
   #m1 { font-size: 26px; }
   button.tg { padding: 7px 8px; font-size: 12px; }

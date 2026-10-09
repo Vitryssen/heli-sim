@@ -39,7 +39,6 @@ export interface HeliState {
   colI: number;
 
   // indicators (for the HUD)
-  braking: boolean;
   coordOn: boolean;
   envOn: boolean;
 
@@ -61,7 +60,7 @@ export function createState(): HeliState {
     engineOn: false, omega: 0, spoolTarget: 0, engineTorque: 0, govI: 0,
     theta: 0, lambdaI: 0, thrust: 0, rotorTorque: 0, groundEffect: 1, mu: 0,
     attHold: null, hdgHold: null, altHold: null, colI: 0,
-    braking: false, coordOn: false, envOn: false,
+    coordOn: false, envOn: false,
     contacts: 4, grounded: true, skidContact: [true, true, true, true], impact: 0, agl: 0,
     hull: 100, hurt: 0, hit: null, crashed: false,
   };

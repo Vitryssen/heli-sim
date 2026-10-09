@@ -60,4 +60,13 @@ export function step(s: HeliState, input: PilotInput, assists: AssistFlags, worl
   if (wm > 1e-9) { _ax.copy(s.w).divideScalar(wm); _dq.setFromAxisAngle(_ax, wm * dt); s.q.multiply(_dq).normalize(); }
   const skidY = s.pos.y - SKID_DROP;
   s.agl = Math.max(0, skidY - world.groundAt(s.pos.x, s.pos.z, skidY));
+
+  // a wreck comes to rest on whatever it hit (the skid model can't hold an upside-down airframe)
+  if (s.crashed) {
+    const g = world.groundAt(s.pos.x, s.pos.z, s.pos.y) + 0.4;
+    if (s.pos.y < g) {
+      s.pos.y = g; s.vel.y = Math.max(0, s.vel.y);
+      const k = Math.pow(0.85, dt * 60); s.vel.x *= k; s.vel.z *= k; s.w.multiplyScalar(Math.pow(0.9, dt * 60));
+    }
+  }
 }

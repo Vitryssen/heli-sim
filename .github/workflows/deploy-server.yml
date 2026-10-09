@@ -1,0 +1,25 @@
+name: Test and deploy game server to Fly.io
+
+on:
+  push:
+    branches: [main]
+    paths: ['server/**', 'src/sim/**', 'src/world/**', 'src/net/**', 'Dockerfile', 'fly.toml', 'package-lock.json']
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    concurrency: fly-deploy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

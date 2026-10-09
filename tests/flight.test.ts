@@ -1,13 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import { Vector3 } from 'three';
-import { ALL_OFF, ALL_ON, attitude, fly, fresh, kmh, layout, rpmPct, world } from './harness';
+import { ALL_OFF, ALL_ON, attitude, fly, fresh, kmh, layout, rpmPct } from './harness';
 import { placeInFlight, placeOnGround, type HeliState } from '../src/sim/state';
 import { params } from '../src/sim/params';
 import { SKID_DROP } from '../src/sim/geometry';
 
 const STAB_ONLY = { ...ALL_OFF, stability: true };
 const base = layout.pads[0];
-const up = (s: HeliState) => new Vector3(0, 1, 0).applyQuaternion(s.q).y;
 
 function onBase(): HeliState { const s = fresh(); placeOnGround(s, base.x, base.top, base.z); return s; }
 function running(s: HeliState): HeliState { s.engineOn = true; s.omega = s.spoolTarget = params.rotor.omegaNominal; return s; }
@@ -132,21 +131,23 @@ describe('ground handling and recovery', () => {
     expect(Math.abs(attitude(s).pitch)).toBeLessThan(10);
   });
 
-  test('auto-hover braking from 150 km/h at 8 m above ground stays upright', () => {
-    // pick a heading with a clear 600 m corridor
-    let heading = 0;
-    for (let h = 0; h < 360; h += 5) {
-      const rad = (h * Math.PI) / 180, dx = Math.sin(rad), dz = -Math.cos(rad);
-      const clear = layout.trees.every(t => { const along = t.x * dx + t.z * dz, across = Math.abs(t.x * dz - t.z * dx); return along < 0 || along > 600 || across > 15; })
-        && layout.buildings.every(b => { const along = b.x * dx + b.z * dz, across = Math.abs(b.x * dz - b.z * dx); return along < 0 || along > 600 || across > 40; });
-      if (clear) { heading = rad; break; }
-    }
-    const s = fresh(); placeInFlight(s, 0, world.terrainH(0, 0) + 8 + SKID_DROP, 0, 150 / 3.6, heading);
-    let minUp = 1;
-    const r = fly(s, 15, () => ({}), ALL_ON, 0, (_t, st) => { minUp = Math.min(minUp, up(st)); });
-    expect(r.crash).toBeNull();
-    expect(minUp).toBeGreaterThan(0.8);
-    expect(kmh(s)).toBeLessThan(15);
+  test('auto-hover only flies the collective: hands off at speed it keeps its attitude, momentum and altitude', () => {
+    const s = fresh(); placeInFlight(s, 0, 300, 0, 150 / 3.6);
+    s.q.setFromAxisAngle(new Vector3(1, 0, 0), -0.15);
+    const p0 = attitude(s).pitch;
+    fly(s, 2, () => ({}), ALL_ON);
+    const y0 = s.pos.y;
+    fly(s, 4, () => ({}), ALL_ON);
+    expect(Math.abs(attitude(s).pitch - p0)).toBeLessThan(3);   // no braking attitude
+    expect(kmh(s)).toBeGreaterThan(120);                         // momentum carried
+    expect(Math.abs(s.pos.y - y0)).toBeLessThan(2);              // collective held altitude
+  });
+
+  test('auto-hover alone leaves the cyclic raw', () => {
+    const s = fresh(); placeInFlight(s, 0, 300, 0, 0);
+    s.w.set(0.3, 0, 0);                                           // nudge the nose up
+    fly(s, 1, () => ({}), { ...ALL_OFF, autoHover: true });
+    expect(attitude(s).pitch).toBeGreaterThan(10);               // nothing levels it
   });
 });
 

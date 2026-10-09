@@ -31,7 +31,7 @@ export interface ControlContext {
 const _t = new Vector3();
 
 /**
- * Cyclic and pedals → angular acceleration (adds to `out`).
+ * Cyclic and pedals → angular acceleration (adds to `out`). Auto-hover never touches these; it only flies the collective.
  * Assisted modes work out pitch, roll and heading *rates*, then map them onto body rates so a
  * coordinated turn really yaws the aircraft. Raw mode applies the stick as torque.
  */
@@ -39,31 +39,20 @@ export function controlMoments(s: HeliState, input: PilotInput, assists: AssistF
   const ct = p.control, a = p.assists, g = p.g;
   const { pitch, yaw, roll, hs, auth } = c;
   const P = input.pitch, R = input.roll, Yw = input.yaw;
-  const neutral = Math.abs(input.collective) < 0.05;
   const hasCyc = Math.abs(P) > 0.04 || Math.abs(R) > 0.04;
   const yawAuth = Math.max(0.2, 1 / (1 + (hs / ct.yawSpeedFade) ** 2));     // tail rotor loses authority with speed
   const tame = Math.abs(pitch) < 1.2 && Math.abs(roll) < 1.3;
   const PL = a.envelopePitch, RL = a.envelopeRoll;
   const grounded = s.grounded;
-  s.braking = false; s.envOn = false;
+  s.envOn = false;
 
   const coordRate = assists.turnCoord && !grounded
     ? clamp((g * Math.tan(clamp(roll, -1.2, 1.2))) / Math.max(hs, 10), -1.2, 1.2) * smooth(8, 16, hs) : 0;
   s.coordOn = Math.abs(coordRate) > 0.03;
-  const hoverActive = assists.autoHover && neutral && !hasCyc && !grounded && tame;
 
-  if (hoverActive || assists.stability) {
+  if (assists.stability) {
     let thd: number, phd: number, psd: number;
-    if (hoverActive) {
-      // auto-hover: hands off, bleed speed with a gentle attitude
-      const sy = Math.sin(yaw), cy = Math.cos(yaw), fx = -sy, fz = -cy, rx = cy, rz = -sy;
-      let axc = -a.brakeGain * s.vel.x, azc = -a.brakeGain * s.vel.z;
-      const am = Math.hypot(axc, azc), lim = a.brakeMaxG * g;
-      if (am > lim) { axc *= lim / am; azc *= lim / am; }
-      thd = clamp(2.5 * (-Math.atan((axc * fx + azc * fz) / g) - pitch), -1, 1);
-      phd = clamp(2.5 * (-Math.atan((axc * rx + azc * rz) / g) - roll), -1, 1);
-      s.attHold = null; s.braking = hs > 0.5;
-    } else if (hasCyc || grounded || !tame) {
+    if (hasCyc || grounded || !tame) {
       thd = -P * ct.pitchRate; phd = -R * ct.rollRate; s.attHold = null;     // stick commands a rotation rate
     } else {
       if (!s.attHold) s.attHold = { p: pitch, r: roll };                       // letting go holds the attitude

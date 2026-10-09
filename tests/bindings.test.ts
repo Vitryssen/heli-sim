@@ -57,7 +57,7 @@ describe('prefs', () => {
   test('round-trip and defaults', () => {
     const store = memStore();
     expect(loadPrefs(store)).toEqual(DEFAULT_PREFS);
-    savePrefs({ assists: { stability: false, autoHover: true, envelope: false, turnCoord: true }, sensitivity: 1.5, invertY: true }, store);
+    savePrefs({ assists: { stability: false, autoHover: true, envelope: false, turnCoord: true }, sensitivity: 1.5, invertY: true, name: 'Ace' }, store);
     const p = loadPrefs(store);
     expect(p.assists.stability).toBe(false);
     expect(p.sensitivity).toBe(1.5);

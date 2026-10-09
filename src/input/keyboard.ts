@@ -3,7 +3,7 @@ import type { PilotInput } from '../sim/state';
 
 /** Actions that are held (polled each frame); every other action fires once per key press. */
 const HELD: ReadonlySet<Action> = new Set<Action>([
-  'collectiveUp', 'collectiveDown', 'pitchForward', 'pitchBack', 'rollLeft', 'rollRight', 'yawLeft', 'yawRight', 'freeLook',
+  'collectiveUp', 'collectiveDown', 'pitchForward', 'pitchBack', 'rollLeft', 'rollRight', 'yawLeft', 'yawRight', 'freeLook', 'fire',
 ]);
 
 export class Keyboard {
@@ -12,10 +12,29 @@ export class Keyboard {
   private down = new Set<string>();
   private axes = { pitch: 0, roll: 0, yaw: 0, collective: 0 };
 
-  constructor(private bindings: Bindings, private onAction: (a: Action) => void) {
+  /**
+   * Mouse buttons count as keys ("Mouse0" = left) only while `mouseActive()` says so, normally when the
+   * pointer is captured, so the click that captures the mouse never fires a weapon.
+   */
+  constructor(private bindings: Bindings, private onAction: (a: Action) => void, private mouseActive: () => boolean = () => true) {
     addEventListener('keydown', e => this.keydown(e));
     addEventListener('keyup', e => { this.down.delete(e.code); });
     addEventListener('blur', () => this.down.clear());
+    addEventListener('mousedown', e => this.press(`Mouse${e.button}`, e));
+    addEventListener('mouseup', e => { this.down.delete(`Mouse${e.button}`); });
+  }
+
+  private press(code: string, e: MouseEvent): void {
+    if (this.capture) {
+      if ((e.target as HTMLElement | null)?.closest?.('button.bind')) return;     // the click that started rebinding
+      e.preventDefault();
+      const cb = this.capture; this.capture = null; cb(code);
+      return;
+    }
+    if (!this.mouseActive()) return;
+    this.down.add(code);
+    const a = this.bindings.action(code);
+    if (a && !HELD.has(a)) this.onAction(a);
   }
 
   held(a: Action): boolean { return this.down.has(this.bindings.key(a)); }

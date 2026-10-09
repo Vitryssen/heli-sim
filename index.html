@@ -4,13 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Littlebird Pad Hopper</title>
-  <meta name="description" content="A light-helicopter flight sim in the browser: collective, cyclic, pedals, momentum and toggleable assists.">
+  <meta name="description" content="A light-helicopter flight sim in the browser: collective, cyclic, pedals, momentum, miniguns and missiles, solo or multiplayer deathmatch.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
 </head>
 <body>
 <div id="view"></div>
+<div id="vignette" class="hud"></div>
 
 <div id="top" class="hud">
   <div id="tl">
@@ -25,30 +26,29 @@
     <div class="row">
       <button class="tg" id="bFly"><span class="led"></span>Fly fullscreen</button>
       <button class="tg" id="bMouse" aria-pressed="false"><span class="led"></span>Mouse control</button>
-      <button class="tg" id="bCam"><span>Cam: Chase</span><kbd data-key="camera"></kbd></button>
+      <button class="tg" id="bCam"><span>Cam: Cockpit</span><kbd data-key="camera"></kbd></button>
       <button class="tg" id="bReset">Reset<kbd data-key="reset"></kbd></button>
       <button class="tg" id="bSound" aria-pressed="false"><span class="led"></span>Sound<kbd data-key="sound"></kbd></button>
       <button class="tg" id="bSettings">Settings<kbd data-key="settings"></kbd></button>
     </div>
   </div>
-  <div id="tgt" class="panel">
-    <div class="lbl">Target pad</div>
-    <div class="lbl right">Landings <span id="score" class="num sm">0</span></div>
-    <div class="tname" id="tName">Rooftop</div>
-    <div class="tinfo"><svg id="tArrow" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 1 L17 18 L10 13.5 L3 18 Z"/></svg><span id="tDist" class="num sm">0 m</span></div>
+  <div id="side">
+    <div id="mapWrap" class="panel">
+      <canvas id="minimap" width="400" height="400" aria-label="Minimap"></canvas>
+      <span id="mapRange" class="lbl"></span>
+    </div>
+    <div class="panel mp" id="mpPanel" hidden>
+      <div class="lbl">Room <span id="mpRoomName"></span> <span id="mpPing"></span></div>
+      <table id="mpList"></table>
+    </div>
+    <div class="panel mp" id="soloPanel">
+      <div class="lbl">Practice targets destroyed <span id="soloScore" class="num sm">0</span></div>
+    </div>
+    <ul id="feed" aria-live="polite"></ul>
   </div>
 </div>
 
 <svg id="hudsvg" class="hud" viewBox="-280 -175 560 350" aria-hidden="true">
-  <defs><clipPath id="hclip"><rect x="-135" y="-115" width="270" height="230"/></clipPath></defs>
-  <g clip-path="url(#hclip)"><g id="horizon"></g></g>
-  <path class="st" d="M-40 0 H-14 L-7 9 L0 0 L7 9 L14 0 H40"/>
-  <circle class="fl" r="1.8"/>
-  <g id="bankScale"></g>
-  <path id="bankPtr" class="amb" d="M0 -126 L-6 -114 L6 -114 Z"/>
-  <g id="pitchScale"></g>
-  <path id="pArrL" class="amb" d="M-150 0 L-162 -7 L-162 7 Z"/>
-  <path id="pArrR" class="amb" d="M150 0 L162 -7 L162 7 Z"/>
   <rect class="st thin" x="-192" y="-80" width="10" height="160"/>
   <line class="st" x1="-197" y1="0" x2="-177" y2="0"/>
   <rect id="colBar" class="amb" x="-191" y="0" width="8" height="0"/>
@@ -71,19 +71,31 @@
   <text class="sm" x="120" y="150" text-anchor="middle">BANK</text>
   <text id="tBank" class="md" x="120" y="166" text-anchor="middle">0°</text>
 </svg>
-<div id="tags" class="hud"><span id="tagIge">IGE</span><span id="tagEtl">ETL</span><span id="tagAlt">ALT HOLD</span><span id="tagAtt">ATT HOLD</span><span id="tagBrk">HOVER BRAKE</span><span id="tagCrd">TURN COORD</span><span id="tagEnv">ENV LIMIT</span></div>
+<div id="tags" class="hud"><span id="tagIge">IGE</span><span id="tagEtl">ETL</span><span id="tagAlt">ALT HOLD</span><span id="tagAtt">ATT HOLD</span><span id="tagCrd">TURN COORD</span><span id="tagEnv">ENV LIMIT</span></div>
+
+<div id="weapons" class="hud"><span id="wGun" class="on">GUN 3000</span><span id="wMsl">MSL 4</span><span id="wFlr">FLR 30</span></div>
+
+<div id="pipper" class="hud aim" hidden></div>
+<div id="hitMark" class="hud aim" hidden></div>
+<div id="seeker" class="hud aim" hidden></div>
+<div id="lockBox" class="hud aim" hidden>
+  <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="4" y="4" width="40" height="40"/><circle id="lockRing" cx="24" cy="24" r="20" transform="rotate(-90 24 24)"/></svg>
+  <span>LOCK</span>
+</div>
+<div id="warn" class="hud" hidden></div>
 
 <div id="msg" class="hud"><div id="m1"></div><div id="m2"></div></div>
 
 <div id="menu" hidden>
   <div class="card" role="dialog" aria-labelledby="menuTitle">
     <div class="menu-head">
-      <h2 id="menuTitle">Hop the pads</h2>
+      <h2 id="menuTitle">Fly and fight</h2>
       <div class="tabs" role="tablist">
         <button role="tab" data-tab="help">Help</button>
         <button role="tab" data-tab="controls">Controls</button>
         <button role="tab" data-tab="assists">Assists</button>
         <button role="tab" data-tab="mouse">Mouse</button>
+        <button role="tab" data-tab="multiplayer">Multiplayer</button>
       </div>
     </div>
     <div id="menuBody"></div>

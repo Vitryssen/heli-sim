@@ -7,12 +7,16 @@ export const ACTIONS = [
   { id: 'rollRight', label: 'Roll right', group: 'Flight' },
   { id: 'yawLeft', label: 'Pedal left', group: 'Flight' },
   { id: 'yawRight', label: 'Pedal right', group: 'Flight' },
+  { id: 'fire', label: 'Fire', group: 'Weapons' },
+  { id: 'weaponToggle', label: 'Switch guns / missiles', group: 'Weapons' },
+  { id: 'flares', label: 'Drop flares', group: 'Weapons' },
   { id: 'toggleStability', label: 'Stability assist', group: 'Assists' },
   { id: 'toggleAutoHover', label: 'Auto-hover', group: 'Assists' },
   { id: 'toggleEnvelope', label: 'Envelope limits', group: 'Assists' },
   { id: 'toggleTurnCoord', label: 'Turn coordination', group: 'Assists' },
   { id: 'freeLook', label: 'Free look (hold)', group: 'View & game' },
   { id: 'camera', label: 'Cycle camera', group: 'View & game' },
+  { id: 'mapRange', label: 'Minimap range', group: 'View & game' },
   { id: 'reset', label: 'Reset to Base', group: 'View & game' },
   { id: 'sound', label: 'Sound on/off', group: 'View & game' },
   { id: 'invertY', label: 'Invert mouse Y', group: 'View & game' },
@@ -27,12 +31,13 @@ export const DEFAULT_BINDINGS: Readonly<Record<Action, string>> = {
   collectiveUp: 'ShiftLeft', collectiveDown: 'ControlLeft',
   pitchForward: 'KeyW', pitchBack: 'KeyS', rollLeft: 'KeyA', rollRight: 'KeyD',
   yawLeft: 'ArrowLeft', yawRight: 'ArrowRight',
+  fire: 'Mouse0', weaponToggle: 'KeyQ', flares: 'KeyV', mapRange: 'KeyM',
   toggleStability: 'Digit1', toggleAutoHover: 'Digit2', toggleEnvelope: 'Digit3', toggleTurnCoord: 'Digit4',
   freeLook: 'AltLeft', camera: 'KeyC', reset: 'KeyR', sound: 'KeyN', invertY: 'KeyI',
   sensDown: 'BracketLeft', sensUp: 'BracketRight', settings: 'F1',
 };
 
-const STORAGE_KEY = 'heli-sim.bindings.v1';
+const STORAGE_KEY = 'heli-sim.bindings.v1';   // new actions fall back to their defaults when missing
 
 export interface KeyValueStore { getItem(k: string): string | null; setItem(k: string, v: string): void }
 
@@ -49,6 +54,7 @@ export class Bindings {
   key(a: Action): string { return this.map[a]; }
 
   action(code: string): Action | undefined {
+    if (!code) return undefined;
     return (Object.keys(this.map) as Action[]).find(a => this.map[a] === code);
   }
 
@@ -70,6 +76,11 @@ export class Bindings {
       if (!raw) return;
       const saved = JSON.parse(raw) as Partial<Record<Action, string>>;
       for (const a of Object.keys(DEFAULT_BINDINGS) as Action[]) if (typeof saved[a] === 'string') this.map[a] = saved[a]!;
+      // a new action's default key may already be taken by an older save: unbind the newcomer
+      for (const a of Object.keys(DEFAULT_BINDINGS) as Action[]) {
+        if (typeof saved[a] === 'string') continue;
+        if ((Object.keys(this.map) as Action[]).some(o => o !== a && this.map[o] === this.map[a])) this.map[a] = '';
+      }
     } catch { /* unreadable or blocked storage: keep defaults */ }
   }
 
@@ -82,11 +93,13 @@ const NAMED: Record<string, string> = {
   ShiftLeft: 'Left Shift', ShiftRight: 'Right Shift', ControlLeft: 'Left Ctrl', ControlRight: 'Right Ctrl',
   AltLeft: 'Left Alt', AltRight: 'Right Alt', MetaLeft: 'Left Cmd', MetaRight: 'Right Cmd',
   ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓', Space: 'Space', Enter: 'Enter', Tab: 'Tab',
+  Mouse0: 'Left mouse', Mouse1: 'Middle mouse', Mouse2: 'Right mouse', Mouse3: 'Mouse 4', Mouse4: 'Mouse 5',
   BracketLeft: '[', BracketRight: ']', Backquote: '`', Minus: '-', Equal: '=', Semicolon: ';', Quote: "'",
   Comma: ',', Period: '.', Slash: '/', Backslash: '\\', CapsLock: 'Caps Lock', Backspace: 'Backspace',
 };
 
 export function keyLabel(code: string): string {
+  if (!code) return 'unbound';
   if (NAMED[code]) return NAMED[code];
   if (code.startsWith('Key')) return code.slice(3);
   if (code.startsWith('Digit')) return code.slice(5);
