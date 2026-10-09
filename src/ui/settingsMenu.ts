@@ -152,7 +152,9 @@ export class SettingsMenu {
     const name = () => (document.getElementById('mpName') as HTMLInputElement).value;
     const roomField = document.getElementById('mpRoom') as HTMLInputElement;
     roomField.oninput = () => { this.roomDraft = roomField.value; };
-    document.getElementById('mpJoin')!.onclick = () => { if (roomField.value.trim()) this.hooks.onJoin(roomField.value, name()); else roomField.focus(); };
+    const join = () => { if (roomField.value.trim()) this.hooks.onJoin(roomField.value, name()); else roomField.focus(); };
+    document.getElementById('mpJoin')!.onclick = join;
+    for (const id of ['mpName', 'mpRoom']) (document.getElementById(id) as HTMLInputElement).onkeydown = e => { if (e.key === 'Enter') join(); };
     document.getElementById('mpCreate')!.onclick = () => {
       const code = Array.from(crypto.getRandomValues(new Uint8Array(4)), b => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join('') + '-' + Math.floor(10 + Math.random() * 90);
       this.roomDraft = code;

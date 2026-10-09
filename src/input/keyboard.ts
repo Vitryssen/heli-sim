@@ -1,6 +1,16 @@
 import type { Action, Bindings } from './bindings';
 import type { PilotInput } from '../sim/state';
 
+/** True for text inputs, text areas and editable elements, where key presses are text, not controls. */
+export function isTyping(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null;
+  if (!el || !el.tagName) return false;
+  if (el.isContentEditable || el.tagName === 'TEXTAREA') return true;
+  if (el.tagName !== 'INPUT') return false;
+  const type = (el as HTMLInputElement).type;
+  return !['checkbox', 'radio', 'range', 'button', 'submit', 'reset', 'color', 'file'].includes(type);
+}
+
 /** Actions that are held (polled each frame); every other action fires once per key press. */
 const HELD: ReadonlySet<Action> = new Set<Action>([
   'collectiveUp', 'collectiveDown', 'pitchForward', 'pitchBack', 'rollLeft', 'rollRight', 'yawLeft', 'yawRight', 'freeLook', 'fire',
@@ -51,6 +61,8 @@ export class Keyboard {
   }
 
   private keydown(e: KeyboardEvent): void {
+    // typing in a text field (pilot name, room code): the keys belong to the field, not the aircraft
+    if (isTyping(e.target)) return;
     if (this.capture) {
       e.preventDefault();
       const cb = this.capture; this.capture = null;
