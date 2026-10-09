@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Littlebird Pad Hopper</title>
+  <meta name="description" content="A light-helicopter flight sim in the browser: collective, cyclic, pedals, momentum and toggleable assists.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+</head>
+<body>
+<div id="view"></div>
+
+<div id="top" class="hud">
+  <div id="tl">
+    <div class="brand"><strong>Littlebird Pad Hopper</strong><span>MH-6 class · 8.3 m rotor</span></div>
+    <div class="row">
+      <span class="lbl group-lbl">Assists</span>
+      <button class="tg" data-assist="stability" aria-pressed="true"><span class="led"></span>Stability<kbd data-key="toggleStability"></kbd></button>
+      <button class="tg" data-assist="autoHover" aria-pressed="true"><span class="led"></span>Auto-hover<kbd data-key="toggleAutoHover"></kbd></button>
+      <button class="tg" data-assist="envelope" aria-pressed="true"><span class="led"></span>Envelope limits<kbd data-key="toggleEnvelope"></kbd></button>
+      <button class="tg" data-assist="turnCoord" aria-pressed="true"><span class="led"></span>Turn coord<kbd data-key="toggleTurnCoord"></kbd></button>
+    </div>
+    <div class="row">
+      <button class="tg" id="bFly"><span class="led"></span>Fly fullscreen</button>
+      <button class="tg" id="bMouse" aria-pressed="false"><span class="led"></span>Mouse control</button>
+      <button class="tg" id="bCam"><span>Cam: Chase</span><kbd data-key="camera"></kbd></button>
+      <button class="tg" id="bReset">Reset<kbd data-key="reset"></kbd></button>
+      <button class="tg" id="bSound" aria-pressed="false"><span class="led"></span>Sound<kbd data-key="sound"></kbd></button>
+      <button class="tg" id="bSettings">Settings<kbd data-key="settings"></kbd></button>
+    </div>
+  </div>
+  <div id="tgt" class="panel">
+    <div class="lbl">Target pad</div>
+    <div class="lbl right">Landings <span id="score" class="num sm">0</span></div>
+    <div class="tname" id="tName">Rooftop</div>
+    <div class="tinfo"><svg id="tArrow" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 1 L17 18 L10 13.5 L3 18 Z"/></svg><span id="tDist" class="num sm">0 m</span></div>
+  </div>
+</div>
+
+<svg id="hudsvg" class="hud" viewBox="-280 -175 560 350" aria-hidden="true">
+  <defs><clipPath id="hclip"><rect x="-135" y="-115" width="270" height="230"/></clipPath></defs>
+  <g clip-path="url(#hclip)"><g id="horizon"></g></g>
+  <path class="st" d="M-40 0 H-14 L-7 9 L0 0 L7 9 L14 0 H40"/>
+  <circle class="fl" r="1.8"/>
+  <g id="bankScale"></g>
+  <path id="bankPtr" class="amb" d="M0 -126 L-6 -114 L6 -114 Z"/>
+  <g id="pitchScale"></g>
+  <path id="pArrL" class="amb" d="M-150 0 L-162 -7 L-162 7 Z"/>
+  <path id="pArrR" class="amb" d="M150 0 L162 -7 L162 7 Z"/>
+  <rect class="st thin" x="-192" y="-80" width="10" height="160"/>
+  <line class="st" x1="-197" y1="0" x2="-177" y2="0"/>
+  <rect id="colBar" class="amb" x="-191" y="0" width="8" height="0"/>
+  <line id="thrTick" class="st thrust" x1="-197" y1="0" x2="-177" y2="0"/>
+  <text class="sm" x="-187" y="98" text-anchor="middle">COLL</text>
+  <text class="sm" x="-210" y="-14" text-anchor="end">SPD km/h</text>
+  <text id="tSpd" class="big" x="-210" y="12" text-anchor="end">0</text>
+  <text class="sm" x="196" y="-14">ALT AGL m</text>
+  <text id="tAgl" class="big" x="196" y="12">0</text>
+  <text class="sm" x="196" y="38">ASL</text>
+  <text id="tAsl" class="md" x="222" y="38">0</text>
+  <text class="sm" x="196" y="58">V/S</text>
+  <text id="tVs" class="md" x="222" y="58">0.0</text>
+  <text class="sm" x="-120" y="150" text-anchor="middle">HDG</text>
+  <text id="tHdg" class="md" x="-120" y="166" text-anchor="middle">000</text>
+  <text class="sm" x="-40" y="150" text-anchor="middle">ROTOR</text>
+  <text id="tRpm" class="md" x="-40" y="166" text-anchor="middle">0%</text>
+  <text class="sm" x="40" y="150" text-anchor="middle">HULL</text>
+  <text id="tHull" class="md" x="40" y="166" text-anchor="middle">100%</text>
+  <text class="sm" x="120" y="150" text-anchor="middle">BANK</text>
+  <text id="tBank" class="md" x="120" y="166" text-anchor="middle">0°</text>
+</svg>
+<div id="tags" class="hud"><span id="tagIge">IGE</span><span id="tagEtl">ETL</span><span id="tagAlt">ALT HOLD</span><span id="tagAtt">ATT HOLD</span><span id="tagBrk">HOVER BRAKE</span><span id="tagCrd">TURN COORD</span><span id="tagEnv">ENV LIMIT</span></div>
+
+<div id="msg" class="hud"><div id="m1"></div><div id="m2"></div></div>
+
+<div id="menu" hidden>
+  <div class="card" role="dialog" aria-labelledby="menuTitle">
+    <div class="menu-head">
+      <h2 id="menuTitle">Hop the pads</h2>
+      <div class="tabs" role="tablist">
+        <button role="tab" data-tab="help">Help</button>
+        <button role="tab" data-tab="controls">Controls</button>
+        <button role="tab" data-tab="assists">Assists</button>
+        <button role="tab" data-tab="mouse">Mouse</button>
+      </div>
+    </div>
+    <div id="menuBody"></div>
+    <div class="menu-row">
+      <button class="go" id="menuFly">Fly fullscreen</button>
+      <button class="tg" id="menuWindow">Play in window</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

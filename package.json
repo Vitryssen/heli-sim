@@ -1,0 +1,25 @@
+{
+  "name": "heli-sim",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Littlebird Pad Hopper: a light-helicopter flight sim in the browser.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "three": "0.169.0"
+  },
+  "devDependencies": {
+    "@types/three": "0.169.0",
+    "lil-gui": "0.19.2",
+    "typescript": "5.6.3",
+    "vite": "5.4.11",
+    "vitest": "2.1.8"
+  }
+}
