@@ -3,7 +3,7 @@ name: Test and deploy game server to Fly.io
 on:
   push:
     branches: [main]
-    paths: ['server/**', 'src/sim/**', 'src/world/**', 'src/net/**', 'Dockerfile', 'fly.toml', 'package-lock.json']
+    paths: ['server/**', 'src/sim/**', 'src/world/**', 'src/net/**', 'src/combat/**', 'src/game/**', 'Dockerfile', 'fly.toml', 'package-lock.json']
   workflow_dispatch:
 
 jobs:
