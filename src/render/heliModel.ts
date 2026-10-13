@@ -19,8 +19,8 @@ export interface HeliModel {
   disc: THREE.Mesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>;
   /** Minigun barrel clusters; spin them about z while firing. */
   guns: THREE.Group[];
-  /** Missiles on the rails, outermost first; hide them as they are fired. */
-  missiles: THREE.Mesh[];
+  /** What shows each missile still carried; `missiles[i]` hides once fewer than i + 1 are left. */
+  missiles: THREE.Object3D[];
   /** Where tracers leave the guns, in body axes (default: the combat gun mounts). */
   muzzles?: readonly [number, number, number][];
 }
@@ -65,7 +65,7 @@ function fromAsset(asset: THREE.Group, opts: HeliOptions): HeliModel {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
     const name = (mesh.material as THREE.Material).name;
-    if (opts.weapons === false && (name === 'armas' || name === 'cargador' || mesh.userData.weapon)) mesh.visible = false;
+    if (opts.weapons === false && (name === 'armas' || name === 'cargador')) mesh.visible = false;
     if (opts.bodyColor !== undefined && name === 'base') {
       const mat = (mesh.material as THREE.MeshStandardMaterial).clone();
       mat.map = null; mat.color.set(opts.bodyColor);
@@ -75,7 +75,7 @@ function fromAsset(asset: THREE.Group, opts: HeliOptions): HeliModel {
   const controls = Object.fromEntries(Object.entries(CONTROL).map(([k, name]) =>
     [k, ['L', 'R'].map(s => body.getObjectByName(`${name}_${s}`)).filter((o): o is THREE.Object3D => !!o)])) as Record<keyof typeof CONTROL, THREE.Object3D[]>;
   const guns = ['L', 'R'].map(s => body.getObjectByName(`${GUN}_${s}`)).filter((o): o is THREE.Group => !!o);
-  const missiles = [0, 1, 2, 3].map(i => body.getObjectByName(`${MISSILE}_${i}`)).filter((o): o is THREE.Mesh => !!o);
+  const missiles = [0, 1, 2, 3].map(i => body.getObjectByName(`${MISSILE}_${i}`)).filter((o): o is THREE.Object3D => !!o);
   if (opts.weapons === false) { guns.length = 0; missiles.length = 0; }
   return { root, body, eye: CABIN.eye, cabin: CABIN, controls, rotorTilt, mainRotor, tailRotor, disc: d, guns, missiles, muzzles: MUZZLES };
 }

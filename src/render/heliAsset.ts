@@ -67,7 +67,7 @@ function prepare(model: THREE.Group): THREE.Group {
 
 /** Names of the control pivots `rigControls` adds (a suffix _L/_R per seat). */
 export const CONTROL = { cyclic: 'ctl_cyclic', collective: 'ctl_collective', pedalL: 'ctl_pedalL', pedalR: 'ctl_pedalR' } as const;
-/** Spinning minigun barrels (suffix _L/_R) and the missiles on the launchers, in the order they are fired from the end. */
+/** Spinning minigun barrels (suffix _L/_R), and the rocket-tip groups that stand for the missiles (suffix 0–3, fired from 3 down). */
 export const GUN = 'wpn_gun', MISSILE = 'wpn_missile';
 /** Where the model's minigun muzzles are, in body axes (tracers start here). */
 export const MUZZLES: readonly [number, number, number][] = [[-0.945, -0.595, -1.01], [0.945, -0.595, -1.01]];
@@ -169,46 +169,28 @@ function rigControls(root: THREE.Group): void {
 
 /**
  * Weapons: the six barrels of each minigun (and the clamps round them) go on a pivot along the
- * barrel axis so they can spin. The rocket pods come off; the game fires four lock-on missiles, so
- * each side gets a two-missile launcher in their place, close to where missiles launch from.
+ * barrel axis so they can spin. The game's missiles leave from the rocket pods; each pod's rocket
+ * tips are split into an upper and a lower half that disappear as that side fires (the game
+ * alternates left, right, left, right), so the pods empty as you shoot.
  */
 function rigWeapons(root: THREE.Group): void {
   const found = pieces(root, 'armas');
   if (!found) return;
   const v = new THREE.Vector3();
-  const axis = (b: THREE.Box3) => b.getCenter(new THREE.Vector3());
+  const centre = (b: THREE.Box3) => b.getCenter(new THREE.Vector3());
   const groups = new Map<string, { piece: Piece; pivot: (b: THREE.Box3) => THREE.Vector3 }[]>(), keep: number[] = [];
+  const add = (key: string, piece: Piece) => groups.set(key, [...(groups.get(key) ?? []), { piece, pivot: centre }]);
   for (const piece of found.pieces) {
-    const c = piece.box.getCenter(v), ax = Math.abs(c.x);
-    if (ax > 1.2 && ax < 1.7) continue;                                         // rocket pod and its rockets
-    if (ax > 0.82 && ax < 1.08 && c.z < -0.3 && c.y > -0.75 && c.y < -0.45) {
-      const key = `${GUN}_${c.x > 0 ? 'R' : 'L'}`;
-      groups.set(key, [...(groups.get(key) ?? []), { piece, pivot: axis }]);
+    const b = piece.box, c = b.getCenter(v), ax = Math.abs(c.x), left = c.x < 0;
+    if (ax > 0.82 && ax < 1.08 && c.z < -0.3 && c.y > -0.75 && c.y < -0.45) { add(`${GUN}_${left ? 'L' : 'R'}`, piece); continue; }
+    if (ax > 1.2 && ax < 1.7 && c.z < -0.9 && b.max.x - b.min.x < 0.12) {                 // a rocket tip in a pod's mouth
+      const upper = c.y >= -0.72;                                                         // pod axis at y ≈ -0.71
+      add(`${MISSILE}_${upper ? (left ? 3 : 2) : (left ? 1 : 0)}`, piece);                // index = missiles left when it goes
       continue;
     }
     keep.push(...piece.tris);
   }
   hang(root, found.mesh, keep, groups);
-
-  const rail = new THREE.MeshStandardMaterial({ color: 0x1b1e22, roughness: 0.8 });
-  const body = new THREE.MeshStandardMaterial({ color: 0x8a8f7a, roughness: 0.7 });
-  const missileGeo = new THREE.CylinderGeometry(0.085, 0.085, 1.6, 12).rotateX(Math.PI / 2);
-  const noseGeo = new THREE.SphereGeometry(0.085, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(-Math.PI / 2).translate(0, 0, -0.8);
-  let n = 0;
-  for (const s of [-1, 1]) {
-    const r = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 1.1), rail);
-    r.position.set(s * 1.42, -0.55, -0.1);
-    r.userData.weapon = true; r.castShadow = true;
-    root.add(r);
-    for (const dy of [0, -0.19]) {
-      const m = new THREE.Mesh(missileGeo, body);
-      m.add(new THREE.Mesh(noseGeo, body));
-      m.position.set(s * 1.42, -0.69 + dy, -0.1);
-      m.name = `${MISSILE}_${n++}`;
-      m.userData.weapon = true; m.castShadow = true;
-      root.add(m);
-    }
-  }
 }
 
 /** Repaints the bright green screen swatch of the palette texture a dark, unlit display colour. */

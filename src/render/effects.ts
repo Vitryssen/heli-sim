@@ -76,7 +76,7 @@ class Particles {
   }
 }
 
-interface Tracer { x: number; y: number; z: number; dx: number; dy: number; dz: number; left: number; impact: boolean }
+interface Tracer { x: number; y: number; z: number; dx: number; dy: number; dz: number; left: number; flown: number; impact: boolean }
 
 const TRACER_LEN = 14, MAX_TRACERS = 160;
 
@@ -138,12 +138,13 @@ export class Effects {
       acc -= 1;
       const m = this.muzzles[round % this.muzzles.length];
       const muzzle = this._v.set(m[0], m[1], m[2]).applyQuaternion(q).add(pos);
-      if (round % 2 === 0) this.fire.emit(muzzle.x, muzzle.y, muzzle.z, vel.x, vel.y, vel.z, 0.05, 0.9, 0.9);
+      if ((round >> 1) % 2 === 0) this.fire.emit(   // rounds alternate guns: a flash on every other round of each
+        muzzle.x, muzzle.y, muzzle.z, vel.x, vel.y, vel.z, 0.05, 0.9, 0.9);
       if (round % g.tracerEvery === 0) {
         const sx = (Math.random() * 2 - 1) * g.spread, sy = (Math.random() * 2 - 1) * g.spread;
         const d = this._d.set(sx, -Math.sin(g.boresightDown) + sy, -Math.cos(g.boresightDown)).normalize().applyQuaternion(q);
         const hit = this.world.raycast(muzzle.x, muzzle.y, muzzle.z, d.x, d.y, d.z, g.range);
-        if (this.tracers.length < MAX_TRACERS) this.tracers.push({ x: muzzle.x, y: muzzle.y, z: muzzle.z, dx: d.x, dy: d.y, dz: d.z, left: hit ?? g.range, impact: hit !== null });
+        if (this.tracers.length < MAX_TRACERS) this.tracers.push({ x: muzzle.x, y: muzzle.y, z: muzzle.z, dx: d.x, dy: d.y, dz: d.z, left: hit ?? g.range, flown: 0, impact: hit !== null });
       }
       round++;
     }
@@ -215,7 +216,7 @@ export class Effects {
       const t = this.tracers[i];
       const step = Math.min(speed * dt, t.left);
       t.x += t.dx * step; t.y += t.dy * step; t.z += t.dz * step;
-      t.left -= step;
+      t.left -= step; t.flown += step;
       if (t.left <= 0) {
         if (t.impact) {
           for (let k = 0; k < 3; k++) this.dust.emit(t.x, t.y, t.z, (Math.random() - 0.5) * 6, 3 + Math.random() * 4, (Math.random() - 0.5) * 6, 0.8, 1.4, 0.7);
@@ -229,7 +230,8 @@ export class Effects {
     this.tracers.forEach((t, i) => {
       const j = i * 6;
       p[j] = t.x; p[j + 1] = t.y; p[j + 2] = t.z;
-      p[j + 3] = t.x - t.dx * TRACER_LEN; p[j + 4] = t.y - t.dy * TRACER_LEN; p[j + 5] = t.z - t.dz * TRACER_LEN;
+      const len = Math.min(TRACER_LEN, t.flown);                    // a fresh tracer doesn't reach back past the gun
+      p[j + 3] = t.x - t.dx * len; p[j + 4] = t.y - t.dy * len; p[j + 5] = t.z - t.dz * len;
     });
     this.tracerGeo.attributes.position.needsUpdate = true;
 

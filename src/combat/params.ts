@@ -32,7 +32,7 @@ export const combatParams = {
     splashDamage: 30,
     life: 12,                      // s: about 2 km at cruise, matching the lock range
     seekerHalfAngle: 30 * DEG,     // flares inside this cone can decoy the missile
-    rails: [[-1.35, -0.6, -0.3], [1.35, -0.6, -0.3]] as [number, number, number][],
+    rails: [[-1.44, -0.71, -1.0], [1.44, -0.71, -1.0]] as [number, number, number][],   // the rocket pods' mouths (body axes)
   },
   flares: {
     count: 24,                     // 4 salvos, one per missile a pilot carries
