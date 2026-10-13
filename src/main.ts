@@ -1,6 +1,6 @@
 import { Euler, Quaternion, Vector3 } from 'three';
 import { createScene, SUN_DIR } from './render/scene';
-import { buildHeliModel } from './render/heliModel';
+import { buildHeliModel, poseControls } from './render/heliModel';
 import { Dust } from './render/dust';
 import { CameraRig } from './render/camera';
 import { Cockpit } from './render/cockpit';
@@ -54,6 +54,7 @@ heli.root.add(cockpit.group);
 if (heli.cabin) cockpit.useModelCabin(heli.cabin);
 const dust = new Dust(kit.scene, kit.renderer);
 const effects = new Effects(kit.scene, kit.renderer, world);
+if (heli.muzzles) effects.muzzles = heli.muzzles;
 const targetModels = new TargetModels(kit.scene);
 const rig = new CameraRig(kit.camera);
 rig.eye.copy(heli.eye);
@@ -335,8 +336,8 @@ for (const b of document.querySelectorAll('button')) b.addEventListener('keydown
 // ---- loop
 const _hub = new Vector3(), _eu = new Euler();
 let last = performance.now(), accum = 0, simT = 0, lastPanel = 0, lastMap = 0;
-// solo flies at 60 Hz, so the aircraft is drawn between its last two steps; drawn at the latest
-// step, a faster screen sees it stand still every other frame and the chase camera judders
+// flight runs at 60 Hz, so the aircraft is drawn between its last two steps (solo here, multiplayer
+// in OwnView); drawn at the latest step, a faster screen sees it stand still every other frame
 const pose = { prevPos: new Vector3(), prevQ: new Quaternion(), endPos: new Vector3(), endQ: new Quaternion(), alpha: 0 };
 const _viewPos = new Vector3(), _viewQ = new Quaternion();
 
@@ -390,7 +391,7 @@ function frame(now: number): void {
 
   // our aircraft is drawn at the smoothed pose in multiplayer, so corrections never pop
   let viewState: HeliState = s;
-  if (net) { net.updateView(dt); viewState = { ...s, pos: net.viewPos, q: net.viewQ }; }
+  if (net) { net.updateView(dt, pose.alpha); viewState = { ...s, pos: net.viewPos, q: net.viewQ }; }
   else if (s.pos.equals(pose.endPos) && s.q.equals(pose.endQ)) {   // not moved since its last step (a reset or respawn would have)
     viewState = { ...s, pos: _viewPos.copy(pose.prevPos).lerp(s.pos, pose.alpha), q: _viewQ.copy(pose.prevQ).slerp(s.q, pose.alpha) };
   }
@@ -445,6 +446,7 @@ function frame(now: number): void {
   const lk = cv.self.lock;
   const stores = { mode: weaponMode, ammo: cv.self.ammo, missiles: cv.self.missiles, flares: cv.self.flares, lock: lk.locked ? 'locked' as const : lk.targetId !== null ? 'search' as const : 'none' as const, warning: cv.self.warning };
   cockpit.update(now, viewState, input, params, stores);
+  poseControls(heli, input);
   rig.update(dt, viewState, world, mouse.look, rpm);
   kit.sky.position.copy(kit.camera.position);
   kit.sun.position.copy(viewState.pos).addScaledVector(SUN_DIR, 150);

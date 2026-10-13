@@ -4,6 +4,7 @@ import type { WorldQuery } from '../world/query';
 import type { Layout } from '../world/layout';
 import { decodeServer, encode, NET_DT, paramsHash, PROTOCOL_VERSION, unpackCombat, type Buttons, type PackedCombat, type ServerMsg, type SnapshotMsg } from './protocol';
 import { Predictor } from './predictor';
+import { OwnView } from './ownView';
 import type { CombatEvent } from '../combat/combat';
 import type { Lock, WeaponInput } from '../combat/loadout';
 import { createTargets, placeDrone, type PracticeTarget } from '../combat/targets';
@@ -36,15 +37,14 @@ const SNAP_DISTANCE = 30;     // m: a jump this big is a respawn, don't glide ac
 
 /**
  * Multiplayer connection. Your own aircraft is predicted locally and reconciled with server
- * snapshots (small corrections are blended out over ~100 ms). Everyone else is interpolated.
+ * snapshots; `OwnView` draws it smoothly between steps and blends corrections out. Everyone else is interpolated.
  */
 export class NetSession {
   status: NetStatus = 'connecting';
   id = -1;
   ping = 0;
   readonly predictor: Predictor;
-  readonly viewPos = new Vector3();
-  readonly viewQ = new Quaternion();
+  private own = new OwnView();
   private ws: WebSocket;
   private remotes = new Map<number, { name: string; samples: Sample[] }>();
   private names = new Map<number, string>();
@@ -52,12 +52,8 @@ export class NetSession {
   private synced = false;
   private respawns = -1;
   private wasCrashed = false;
-  private offPos = new Vector3();
-  private offQ = new Quaternion();
   private pingTimer: ReturnType<typeof setInterval>;
-  private _v = new Vector3();
-  private _q = new Quaternion();
-  private _qi = new Quaternion();
+  private before = { pos: new Vector3(), q: new Quaternion() };
   // combat, as last reported by the server
   private combat = new Map<number, PackedCombat>();
   private missiles: Projectile[] = [];
@@ -90,6 +86,7 @@ export class NetSession {
   /** One 60 Hz input tick: flight applied locally straight away; flight and weapons sent to the server. */
   tick(input: PilotInput, assists: AssistFlags, buttons: Buttons, weapon: WeaponInput): void {
     if (!this.ready || this.ws.readyState !== WebSocket.OPEN) return;
+    this.own.beforeStep(this.state);
     this.ws.send(encode(this.predictor.next(input, assists, buttons, weapon, this.viewTick())));
   }
 
@@ -129,13 +126,9 @@ export class NetSession {
   get serverLock(): number | null { return this.combat.get(this.id)?.lockId ?? null; }
 
   /** Per frame: blend out the last correction and return the smoothed pose of our aircraft. */
-  updateView(dt: number): void {
-    const k = Math.exp(-dt * 12);
-    this.offPos.multiplyScalar(k);
-    this.offQ.slerp(this._q.identity(), 1 - k);
-    this.viewPos.copy(this.state.pos).add(this.offPos);
-    this.viewQ.copy(this.offQ).multiply(this.state.q);
-  }
+  updateView(dt: number, alpha: number): void { this.own.update(this.state, dt, alpha); }
+  get viewPos(): Vector3 { return this.own.pos; }
+  get viewQ(): Quaternion { return this.own.q; }
 
   remoteViews(): RemoteView[] {
     if (this.clockOffset === null) return [];
@@ -210,17 +203,11 @@ export class NetSession {
   }
 
   private reconcileOwn(s: number[], ack: number, respawns: number, reason: string | null): void {
-    // remember where we were drawing the aircraft, so the correction can be blended rather than popped
-    this._v.copy(this.state.pos).add(this.offPos);
-    this._q.copy(this.offQ).multiply(this.state.q);
+    // remember the predicted pose, so OwnView can carry the correction instead of popping
+    this.before.pos.copy(this.state.pos); this.before.q.copy(this.state.q);
     this.predictor.reconcile(s, ack);
     const respawned = this.respawns !== -1 && respawns !== this.respawns;
-    if (!this.synced || respawned) { this.offPos.set(0, 0, 0); this.offQ.identity(); }
-    else {
-      this.offPos.copy(this._v).sub(this.state.pos);
-      this.offQ.copy(this._q).multiply(this._qi.copy(this.state.q).invert());
-      if (this.offPos.length() > 8) { this.offPos.set(0, 0, 0); this.offQ.identity(); }
-    }
+    this.own.corrected(this.before, this.state, !this.synced || respawned);
     if (!this.synced) { this.synced = true; this.wasCrashed = this.state.crashed; }
     if (respawned) this.h.onRespawn();
     this.respawns = respawns;
