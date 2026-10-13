@@ -1,5 +1,8 @@
 import { clamp } from '../sim/math';
 
+const VOLUME = 0.22;  // overall level, kept below the weapons, warnings and chimes
+const OUTSIDE = 0.55; // in third person the rotor is quieter still (~5 dB)
+
 /** Synthesized rotor thump (filtered brown noise chopped at blade-pass rate) plus turbine whine. */
 export class RotorSound {
   on = false;
@@ -14,10 +17,10 @@ export class RotorSound {
     return this.on;
   }
 
-  update(loadG: number, rpm: number, engineOn: boolean): void {
+  update(loadG: number, rpm: number, engineOn: boolean, outside = false): void {
     if (!this.ctx || !this.nodes) return;
     const t = this.ctx.currentTime, n = this.nodes, load = clamp(loadG, 0, 2);
-    n.master.gain.setTargetAtTime(this.on ? (0.15 + 0.3 * load) * Math.min(1, rpm * 1.5) : 0, t, 0.08);
+    n.master.gain.setTargetAtTime(this.on ? VOLUME * (outside ? OUTSIDE : 1) * (0.15 + 0.3 * load) * Math.min(1, rpm * 1.5) : 0, t, 0.08);
     n.lfoAmt.gain.setTargetAtTime(0.3 + 0.3 * load, t, 0.08);
     n.lp.frequency.setTargetAtTime(300 + 400 * load, t, 0.08);
     n.lfo.frequency.setTargetAtTime(23 * Math.max(0.05, rpm), t, 0.1);

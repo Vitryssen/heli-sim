@@ -459,7 +459,7 @@ function frame(now: number): void {
   aim.update(now, kit.camera, viewState.pos, viewState.q, { ...cv.self, mode: weaponMode }, lockPos(cv.self.lock.targetId), !menu.open);
   if (now - lastMap > 33) { lastMap = now; drawMap(viewState, remoteViews, cv); }
   if (now - lastPanel > 500) { lastPanel = now; updatePanels(cv); }
-  sound.update(loadG, rpm, s.engineOn);
+  sound.update(loadG, rpm, s.engineOn, rig.mode !== 'Cockpit');
   combatSound.update(localFiring, stores.lock, weaponMode === 'missile', cv.self.warning);
   feed.tick(now);
   messages.tick(dt);
