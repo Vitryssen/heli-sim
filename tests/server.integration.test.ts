@@ -28,7 +28,9 @@ test('two clients share a room: one spools up and lifts off, the other sees it',
   await Promise.all([a.open, b.open]);
   expect(await until(() => !!a.id() && !!b.id())).toBe(true);
   const aId = a.id()!;
-  const startY = (b.inbox.filter((m): m is SnapshotMsg => m.type === 'snapshot').pop()!.players.find(p => p.id === aId)!).s[1];
+  const lastSnap = () => b.inbox.filter((m): m is SnapshotMsg => m.type === 'snapshot').pop();
+  expect(await until(() => !!lastSnap()?.players.some(p => p.id === aId))).toBe(true);   // Bravo can join before Alpha is in a snapshot
+  const startY = lastSnap()!.players.find(p => p.id === aId)!.s[1];
 
   // Alpha holds the collective up for 5 s worth of ticks, sent in real time
   for (let seq = 1; seq <= 300; seq++) {
