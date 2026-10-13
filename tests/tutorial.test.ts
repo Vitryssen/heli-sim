@@ -151,21 +151,25 @@ describe('weapons lesson', () => {
   test('steps follow the combat state; a missile that gets through is sent again', () => {
     const l = lesson('weapons'), tut = new Tutorial(() => null), s = fresh();
     place(s, tut.start(l));
-    const c = { mode: 'gun' as const, lock: 'none' as const, targetKills: 0, threat: 'none' as const };
+    const c = { mode: 'gun' as const, lock: 'none' as const, gunKills: 0, missileKills: 0, threat: 'none' as const };
     const tick = (combat: object) => tut.tick(NET_DT, s, NEUTRAL, { ...c, ...combat });
     tick({});                                                    // step 1 begins
-    tick({ targetKills: 1 }); expect(tut.step).toBe(1);          // truck down with the guns
-    tick({ targetKills: 1, mode: 'missile' }); expect(tut.step).toBe(2);
-    tick({ targetKills: 1, mode: 'missile', lock: 'search' }); expect(tut.step).toBe(2);
-    tick({ targetKills: 1, mode: 'missile', lock: 'locked' }); expect(tut.step).toBe(3);
-    tick({ targetKills: 1, mode: 'missile' }); expect(tut.step).toBe(3);        // a kill from before this step doesn't count
-    tick({ targetKills: 2, mode: 'missile' }); expect(tut.step).toBe(4);
-    expect(tick({ targetKills: 2, mode: 'missile' })).toEqual([{ kind: 'incoming' }]);          // flare step: here it comes
-    expect(tick({ targetKills: 2, mode: 'missile', threat: 'inbound' })).toEqual([]);
-    expect(tick({ targetKills: 2, mode: 'missile', threat: 'hit' })).toEqual([{ kind: 'incoming' }]);   // got through: again
-    tick({ targetKills: 2, mode: 'missile', threat: 'inbound' });
-    tick({ targetKills: 2, mode: 'missile', threat: 'decoyed' }); expect(tut.step).toBe(5);
-    expect(tick({ targetKills: 2, mode: 'gun', threat: 'decoyed' })).toMatchObject([{ kind: 'complete' }]);
+    tick({ missileKills: 1 }); expect(tut.step).toBe(0);         // a missile kill doesn't count for the gun step
+    tick({ missileKills: 1, gunKills: 1 }); expect(tut.step).toBe(1);   // truck down with the guns
+    const k = { gunKills: 1, missileKills: 1 };
+    tick({ ...k, mode: 'missile' }); expect(tut.step).toBe(2);
+    tick({ ...k, mode: 'missile', lock: 'search' }); expect(tut.step).toBe(2);
+    tick({ ...k, mode: 'missile', lock: 'locked' }); expect(tut.step).toBe(3);
+    tick({ ...k, mode: 'missile' }); expect(tut.step).toBe(3);                 // a kill from before this step doesn't count
+    tick({ ...k, gunKills: 2, mode: 'missile' }); expect(tut.step).toBe(3);    // nor one with the guns
+    const k2 = { gunKills: 2, missileKills: 2 };
+    tick({ ...k2, mode: 'missile' }); expect(tut.step).toBe(4);
+    expect(tick({ ...k2, mode: 'missile' })).toEqual([{ kind: 'incoming' }]);          // flare step: here it comes
+    expect(tick({ ...k2, mode: 'missile', threat: 'inbound' })).toEqual([]);
+    expect(tick({ ...k2, mode: 'missile', threat: 'hit' })).toEqual([{ kind: 'incoming' }]);   // got through: again
+    tick({ ...k2, mode: 'missile', threat: 'inbound' });
+    tick({ ...k2, mode: 'missile', threat: 'decoyed' }); expect(tut.step).toBe(5);
+    expect(tick({ ...k2, mode: 'gun', threat: 'decoyed' })).toMatchObject([{ kind: 'complete' }]);
   });
 });
 

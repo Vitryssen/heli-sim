@@ -249,6 +249,7 @@ describe('practice targets and rearming', () => {
     expect(drone.alive).toBe(false);
     expect(downs).toBe(1);
     expect(a.targetKills).toBe(1);
+    expect(a.targetKillsBy).toEqual({ gun: 1, missile: 0 });
     run(combat, ctx, P.targets.respawn + 0.1, {});
     expect(drone.alive).toBe(true);
   });

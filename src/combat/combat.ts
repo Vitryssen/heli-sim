@@ -19,6 +19,7 @@ export interface Member {
   kills: number;
   deaths: number;
   targetKills: number;
+  targetKillsBy: { gun: number; missile: number };   // the same, by weapon (the weapons lesson checks which)
   dead: boolean;
   respawnIn: number;
   killedBy: { id: number; weapon: Weapon } | null;
@@ -30,7 +31,7 @@ export interface Flare { id: number; owner: number; pos: Vector3; vel: Vector3; 
 export type CombatEvent =
   | { kind: 'hit'; shooter: number; victim: number; damage: number; x: number; y: number; z: number; weapon: 'gun' | 'missile' }
   | { kind: 'kill'; killer: number | null; victim: number; weapon: Weapon }
-  | { kind: 'targetDown'; shooter: number; target: number }
+  | { kind: 'targetDown'; shooter: number; target: number; weapon: 'gun' | 'missile' }
   | { kind: 'explosion'; x: number; y: number; z: number; size: number }
   | { kind: 'launch'; shooter: number; missile: number }
   | { kind: 'flare'; owner: number }
@@ -71,7 +72,7 @@ export class Combat {
   }
 
   add(id: number, name: string, state: HeliState): Member {
-    const m: Member = { id, name, state, loadout: createLoadout(), kills: 0, deaths: 0, targetKills: 0, dead: false, respawnIn: 0, killedBy: null };
+    const m: Member = { id, name, state, loadout: createLoadout(), kills: 0, deaths: 0, targetKills: 0, targetKillsBy: { gun: 0, missile: 0 }, dead: false, respawnIn: 0, killedBy: null };
     this.members.set(id, m);
     return m;
   }
@@ -204,7 +205,7 @@ export class Combat {
     if (h) { h.damage += g.damage; h.x = _v.x; h.y = _v.y; h.z = _v.z; }
     else this.hits.set(key, { kind: 'hit', shooter: m.id, victim: victimId, damage: g.damage, x: _v.x, y: _v.y, z: _v.z, weapon: 'gun' });
     if (victim) this.damageMember(victim, g.damage, m.id, 'gun');
-    else this.damageTarget(target!, g.damage, m.id, _v);
+    else this.damageTarget(target!, g.damage, m.id, _v, 'gun');
   }
 
   private launch(m: Member): void {
@@ -295,7 +296,7 @@ export class Combat {
       if (dmg <= 0) return;
       this.events.push({ kind: 'hit', shooter: ms.owner, victim: e.id, damage: dmg, x: ms.pos.x, y: ms.pos.y, z: ms.pos.z, weapon: 'missile' });
       if ('loadout' in e) this.damageMember(e, dmg, ms.owner, 'missile');
-      else this.damageTarget(e, dmg, ms.owner, ms.pos);
+      else this.damageTarget(e, dmg, ms.owner, ms.pos, 'missile');
     };
     if (direct) apply(direct, mp.damage);
     for (const m of this.members.values()) {
@@ -335,15 +336,15 @@ export class Combat {
     this.events.push({ kind: 'explosion', x: s.pos.x, y: s.pos.y, z: s.pos.z, size: 9 });
   }
 
-  private damageTarget(t: PracticeTarget, amount: number, by: number, at: Vector3): void {
+  private damageTarget(t: PracticeTarget, amount: number, by: number, at: Vector3, weapon: 'gun' | 'missile'): void {
     if (!t.alive) return;
     t.hp -= amount;
     if (t.hp > 0) return;
     t.alive = false;
     t.respawnIn = P.targets.respawn;
     const m = this.members.get(by);
-    if (m) m.targetKills++;
-    this.events.push({ kind: 'targetDown', shooter: by, target: t.id });
+    if (m) { m.targetKills++; m.targetKillsBy[weapon]++; }
+    this.events.push({ kind: 'targetDown', shooter: by, target: t.id, weapon });
     this.events.push({ kind: 'explosion', x: at.x, y: t.pos.y, z: at.z, size: t.kind === 'drone' ? 7 : 9 });
   }
 

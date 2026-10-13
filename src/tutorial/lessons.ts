@@ -11,8 +11,8 @@ export type Metric = 'time' | 'wobble' | 'drift' | 'collective' | 'maxPitch' | '
 export interface Start { x: number; z: number; heading: number; agl?: number; speed?: number; top?: number }   // heading °, speed km/h
 
 /** Solo combat as the HUD shows it, for the weapons lesson. `threat` is the training missile's fate. */
-export interface CombatProbe { mode: 'gun' | 'missile'; lock: 'none' | 'search' | 'locked'; targetKills: number; threat: 'none' | 'inbound' | 'decoyed' | 'hit' }
-export const NO_COMBAT: CombatProbe = { mode: 'gun', lock: 'none', targetKills: 0, threat: 'none' };
+export interface CombatProbe { mode: 'gun' | 'missile'; lock: 'none' | 'search' | 'locked'; gunKills: number; missileKills: number; threat: 'none' | 'inbound' | 'decoyed' | 'hit' }
+export const NO_COMBAT: CombatProbe = { mode: 'gun', lock: 'none', gunKills: 0, missileKills: 0, threat: 'none' };
 
 /** Flight data a step's condition can look at; `since` is the combat state when the step began. */
 export interface Probe { s: HeliState; heading: number; hspeed: number; combat: CombatProbe; since: CombatProbe }   // heading 0..360°, horizontal speed m/s
@@ -243,10 +243,10 @@ export function buildLessons(layout: Layout): Lesson[] {
       start: { x: truck.pos.x, z: truck.pos.z + 350, heading: 0, agl: 30, speed: 0 },
       runs: allOn('Practice targets are orange on the minimap: trucks on the ground and drones in the air. Click the view first so the mouse buttons fire.'),
       steps: [
-        { kind: 'do', text: 'Put the small amber ring on the truck ahead and hold {fire} to fire the miniguns. Destroy it.', done: p => p.combat.targetKills > p.since.targetKills },
+        { kind: 'do', text: 'Put the small amber ring on the truck ahead and hold {fire} to fire the miniguns. Destroy it.', done: p => p.combat.gunKills > p.since.gunKills },                    // a missile kill doesn't count here
         { kind: 'do', text: 'Press {weaponToggle} to switch to missiles.', done: p => p.combat.mode === 'missile' },
         { kind: 'do', text: 'Turn toward another truck and hold it inside the dashed circle until the box turns red and says LOCK.', done: p => p.combat.mode === 'missile' && p.combat.lock === 'locked' },
-        { kind: 'do', text: 'Fire with {fire} and watch the missile find its target.', done: p => p.combat.targetKills > p.since.targetKills },
+        { kind: 'do', text: 'Fire with {fire} and watch the missile find its target.', done: p => p.combat.missileKills > p.since.missileKills },
         { kind: 'do', text: 'Missile warning! A training missile is coming for you. Drop flares with {flares} to decoy it.', incoming: true, done: p => p.combat.threat === 'decoyed' },
         { kind: 'do', text: 'Switch back to the guns with {weaponToggle}.', done: p => p.combat.mode === 'gun' },
       ],

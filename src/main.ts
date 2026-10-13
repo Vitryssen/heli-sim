@@ -97,7 +97,7 @@ function combatProbe(): CombatProbe {
     if (!ms) threat.state = 'hit';
     else if (ms.flareId !== null) threat.state = 'decoyed';
   }
-  return { mode: me.loadout.mode, lock: lockState(me.loadout), targetKills: me.targetKills, threat: threat?.state ?? 'none' };
+  return { mode: me.loadout.mode, lock: lockState(me.loadout), gunKills: me.targetKillsBy.gun, missileKills: me.targetKillsBy.missile, threat: threat?.state ?? 'none' };
 }
 
 // ---- multiplayer
@@ -280,6 +280,8 @@ function stopLesson(): void { tutorial.stop(); syncButtons(); }
 function leaveTutorial(): void {
   stopLesson();
   if (net) return;
+  threat = null;
+  soloCombat.resetPractice();                                  // no training missile follows you out of the lesson
   messages.show(session.reset());
   soloCombat.revive(SOLO_ID);
   rig.snap();
