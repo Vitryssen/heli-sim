@@ -86,3 +86,7 @@ A lesson sets the assists for each run; the assist keys are locked until you lea
 All tunables live in `src/sim/params.ts`. In `npm run dev`, press **F2** for a live tuning panel; it isn't included in production builds.
 
 `prototype/index.html` is the original single-file version, kept for reference.
+
+## Credits
+
+The AH-6 model is ["Helicopters MH-6 Little Bird"](https://sketchfab.com/3d-models/helicopters-mh-6-little-bird-69cb05db3fc3483cb729734262abf28e) by [mario low poly](https://sketchfab.com/mariogpymario117), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). It was compressed, rescaled and re-oriented for the game, with simplified glass; drones are a recoloured copy without weapons. See `src/assets/little-bird.LICENSE.txt`. If the file fails to load, the game falls back to its built-in model.

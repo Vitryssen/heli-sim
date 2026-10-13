@@ -139,6 +139,8 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 .card h3 { margin: 6px 0 0; font: 600 12px/1 var(--f-label); letter-spacing: .13em; text-transform: uppercase; color: var(--muted); }
 .card p { margin: 0; font: 400 13px/1.55 var(--f-num); color: #c9d4db; max-width: 70ch; }
 .card p b { color: var(--amber); font-weight: 500; }
+.card p.credit { font-size: 11px; color: var(--muted); }
+.card p.credit a { color: inherit; }
 /* only the settings scroll; the title, tabs and buttons stay put */
 .menu-head, .menu-row { flex: none; }
 #menuBody { display: flex; flex-direction: column; gap: 12px; min-height: min(240px, 40vh); overflow-y: auto; }

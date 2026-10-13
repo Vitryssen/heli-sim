@@ -3,6 +3,7 @@ import type { HeliState, PilotInput } from '../sim/state';
 import type { Params } from '../sim/params';
 import { canvasTexture } from './scene';
 import { clamp, DEG } from '../sim/math';
+import type { ScreenSpot } from './heliAsset';
 
 /** What the stores page shows (a combat Loadout fits this shape). */
 export interface StoresView {
@@ -136,6 +137,26 @@ export class Cockpit {
     }
 
     g.traverse(o => { if (o instanceof THREE.Mesh) { o.castShadow = false; o.receiveShadow = false; } });
+  }
+
+  /**
+   * Fly from the 3D model's own cabin: hide the drawn one and show the two live pages on the model's
+   * displays (square pages centred on each screen, over a dark backing).
+   */
+  useModelCabin(cabin: { pfd: ScreenSpot; eng: ScreenSpot }): void {
+    for (const c of this.group.children) c.visible = false;
+    const Z = new THREE.Vector3(0, 0, 1);
+    const backing = new THREE.MeshBasicMaterial({ color: 0x05080a });
+    for (const [spot, page] of [[cabin.pfd, this.pfd], [cabin.eng, this.eng]] as const) {
+      const g = new THREE.Group();
+      g.position.copy(spot.center).addScaledVector(spot.normal, 0.003);
+      g.quaternion.setFromUnitVectors(Z, spot.normal);
+      g.add(new THREE.Mesh(new THREE.PlaneGeometry(spot.w, spot.h), backing));
+      const face = new THREE.Mesh(new THREE.PlaneGeometry(spot.h, spot.h), new THREE.MeshBasicMaterial({ map: page.tex, toneMapped: false }));
+      face.position.z = 0.0005;
+      g.add(face);
+      this.group.add(g);
+    }
   }
 
   update(now: number, s: HeliState, input: PilotInput, p: Params, stores: StoresView): void {

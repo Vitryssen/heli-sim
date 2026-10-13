@@ -1,0 +1,9 @@
+little-bird.glb
+
+"Helicopters MH-6 Little Bird" by mario low poly (https://sketchfab.com/mariogpymario117)
+Source: https://sketchfab.com/3d-models/helicopters-mh-6-little-bird-69cb05db3fc3483cb729734262abf28e
+License: Creative Commons Attribution 4.0 International (CC BY 4.0), https://creativecommons.org/licenses/by/4.0/
+
+Changes: vertices welded and meshopt-compressed with glTF-Transform. In the game the model is
+rescaled to 90 %, turned to face the game's axes, its glass material is replaced with a plain
+transparent one, and the drone targets are recoloured and shown without weapons.

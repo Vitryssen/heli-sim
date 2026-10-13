@@ -92,7 +92,8 @@ export class SettingsMenu {
         </div>
         <p><b>Missiles:</b> hold a target in the dashed circle until LOCK, then fire. Warning tone means flares. Sit still on an <b>H</b> pad for 5 s to rearm.</p>
         <p><b>It carries momentum:</b> the aircraft keeps turning after you let go, and pulling the nose up at speed makes you climb.</p>
-        <p>New to helicopters? The Tutorial tab teaches the basics step by step. Fly fullscreen so Ctrl+W can't close the tab. Every key is listed under Controls.</p>`;
+        <p>New to helicopters? The Tutorial tab teaches the basics step by step. Fly fullscreen so Ctrl+W can't close the tab. Every key is listed under Controls.</p>
+        <p class="credit">AH-6 model: <a href="https://sketchfab.com/3d-models/helicopters-mh-6-little-bird-69cb05db3fc3483cb729734262abf28e" target="_blank" rel="noopener">“Helicopters MH-6 Little Bird”</a> by mario low poly, <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>.</p>`;
     } else if (this.tab === 'controls') {
       const groups = [...new Set(ACTIONS.map(a => a.group))];
       this.body.innerHTML = groups.map(g => `<h3>${g}</h3><div class="binds">${ACTIONS.filter(a => a.group === g).map(a =>

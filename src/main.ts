@@ -1,4 +1,3 @@
-import './style.css';
 import { Euler, Quaternion, Vector3 } from 'three';
 import { createScene, SUN_DIR } from './render/scene';
 import { buildHeliModel } from './render/heliModel';
@@ -52,10 +51,12 @@ buildWorldMeshes(kit.scene, kit.renderer, layout);
 const heli = buildHeliModel(kit.scene);
 const cockpit = new Cockpit(kit.renderer);
 heli.root.add(cockpit.group);
+if (heli.cabin) cockpit.useModelCabin(heli.cabin);
 const dust = new Dust(kit.scene, kit.renderer);
 const effects = new Effects(kit.scene, kit.renderer, world);
 const targetModels = new TargetModels(kit.scene);
 const rig = new CameraRig(kit.camera);
+rig.eye.copy(heli.eye);
 const remotes = new RemoteFleet(kit.scene, kit.renderer);
 const gates = new GateMarkers(kit.scene);
 
@@ -286,7 +287,10 @@ function onTutorial(e: TutorialEvent | null): void {
   messages.show({ title: 'Lesson complete', detail: L.title, kind: 'good', ttl: 3 });
   syncButtons();
 }
-function syncCameraView(): void { $('vignette').hidden = rig.mode !== 'Cockpit'; }
+function syncCameraView(): void {
+  $('vignette').hidden = rig.mode !== 'Cockpit';
+  heli.body.visible = !!heli.cabin || rig.mode !== 'Cockpit';   // the built-in model is flown from the drawn cockpit instead
+}
 function toggleSound(): void {
   const on = sound.toggle();
   combatSound.setEnabled(on);

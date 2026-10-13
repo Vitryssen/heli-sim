@@ -27,6 +27,9 @@ export class CameraRig {
   private fov = { now: 75, target: 75 };
   private dist = { now: 14, target: 14 };
 
+  /** Pilot's eye in body axes; the loaded model has its own seat. */
+  eye = COCKPIT_EYE.clone();
+
   constructor(private camera: THREE.PerspectiveCamera) {}
 
   get mode(): CameraMode { return CAMERA_MODES[this.index]; }
@@ -58,9 +61,9 @@ export class CameraRig {
       this.head.lerp(this.headTarget, 1 - Math.exp(-dt * 5));
       const buzz = s.crashed ? 0 : 0.0012 * Math.min(1, rpm);
       cam.position.set(
-        COCKPIT_EYE.x + this.head.x + (Math.random() - 0.5) * buzz,
-        COCKPIT_EYE.y + this.head.y + (Math.random() - 0.5) * buzz,
-        COCKPIT_EYE.z + this.head.z,
+        this.eye.x + this.head.x + (Math.random() - 0.5) * buzz,
+        this.eye.y + this.head.y + (Math.random() - 0.5) * buzz,
+        this.eye.z + this.head.z,
       ).applyQuaternion(s.q).add(s.pos);
       cam.quaternion.copy(s.q).multiply(this.q1.setFromAxisAngle(Y, free.yaw)).multiply(this.q2.setFromAxisAngle(X, -0.16 + free.pitch));
     } else {
