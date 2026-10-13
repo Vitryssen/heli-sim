@@ -165,7 +165,7 @@ describe('missiles and flares', () => {
     expect(combat.missiles).toHaveLength(1);
     expect(combat.warning(2)).toBe('missile');
     let t = 0, decoyed = false;
-    while (combat.missiles.length && t < 10) {
+    while (combat.missiles.length && t < P.missile.life + 2) {
       const ms = combat.missiles[0];
       const dropNow = flareAt !== null && ms.pos.distanceTo(b.state.pos) < flareAt;
       events.push(...run(combat, ctx, NET_DT, { 1: { mode: 'missile' }, 2: { flare: dropNow } }, move));
@@ -182,15 +182,29 @@ describe('missiles and flares', () => {
     expect(a.loadout.missiles).toBe(P.missile.count - 1);
   });
 
-  test('flares decoy roughly three missiles in four', () => {
+  test('a salvo of flares decoys most missiles', () => {
     let decoys = 0;
     const trials = 200;
     for (let i = 0; i < trials; i++) if (engagement(1000 + i, 400).decoyed) decoys++;
-    expect(decoys / trials).toBeGreaterThan(0.6);
-    expect(decoys / trials).toBeLessThan(0.9);
+    expect(decoys / trials).toBeGreaterThan(0.7);
+    expect(decoys / trials).toBeLessThan(0.95);
   });
 
-  test('a missile with nothing to chase self-destructs after 8 s', () => {
+  test('a salvo leaves one flare at a time, alternating left and right', () => {
+    const { combat, ctx } = setup();
+    const a = combat.add(1, 'A', aircraft(0, 300, 0));
+    a.state.vel.set(0, 0, 0);
+    run(combat, ctx, NET_DT, { 1: { flare: true } });
+    expect(combat.flares).toHaveLength(1);
+    run(combat, ctx, P.flares.interval * (P.flares.salvo - 1) + 0.05, {});
+    expect(combat.flares).toHaveLength(P.flares.salvo);
+    expect(a.loadout.flares).toBe(P.flares.count - P.flares.salvo);
+    const sides = combat.flares.map(f => Math.sign(f.vel.x));   // facing north, so -x is left
+    expect(sides).toEqual(sides.map((_, i) => (i % 2 === 0 ? -1 : 1)));
+    expect(combat.flares[0].age).toBeGreaterThan(combat.flares[P.flares.salvo - 1].age + P.flares.interval * (P.flares.salvo - 2));
+  });
+
+  test('a missile with nothing to chase self-destructs when its life runs out', () => {
     const { combat, ctx } = setup();
     const a = combat.add(1, 'A', aircraft(0, 1500, 0));
     const b = combat.add(2, 'B', aircraft(0, 1500, -600));
@@ -199,7 +213,7 @@ describe('missiles and flares', () => {
     b.state.crashed = true;                         // target gone: the missile flies on unguided
     b.state.pos.set(5000, 1500, 0);
     let t = 0;
-    while (combat.missiles.length && t < 12) { run(combat, ctx, NET_DT, {}); t += NET_DT; }
+    while (combat.missiles.length && t < P.missile.life + 2) { run(combat, ctx, NET_DT, {}); t += NET_DT; }
     expect(t).toBeGreaterThan(P.missile.life - 0.1);
     expect(t).toBeLessThan(P.missile.life + 0.2);
     expect(a.loadout.missiles).toBe(P.missile.count - 1);

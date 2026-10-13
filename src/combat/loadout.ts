@@ -16,6 +16,8 @@ export interface Loadout {
   gunRound: number;           // alternates mounts, counts tracers
   missileCd: number;
   flareCd: number;
+  flareQueue: number;         // flares still to release in the current salvo
+  flareGap: number;           // s until the next one leaves
   lock: Lock;
   firing: boolean;
   prevFire: boolean;
@@ -28,7 +30,7 @@ export interface Loadout {
 export function createLoadout(): Loadout {
   return {
     mode: 'gun', ammo: combatParams.gun.ammo, missiles: combatParams.missile.count, flares: combatParams.flares.count,
-    gunAcc: 0, gunRound: 0, missileCd: 0, flareCd: 0, lock: { targetId: null, progress: 0, locked: false, lostFor: 0 },
+    gunAcc: 0, gunRound: 0, missileCd: 0, flareCd: 0, flareQueue: 0, flareGap: 0, lock: { targetId: null, progress: 0, locked: false, lostFor: 0 },
     firing: false, prevFire: false, prevFlare: false, lastHitBy: null, lastHitAt: -1e9, rearm: 0,
   };
 }

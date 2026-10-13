@@ -123,11 +123,16 @@ export class Combat {
     const l = m.loadout, s = m.state;
     l.missileCd = Math.max(0, l.missileCd - dt);
     l.flareCd = Math.max(0, l.flareCd - dt);
-    if (m.dead || s.crashed) { l.firing = false; clearLock(l.lock); l.prevFire = input.fire; l.prevFlare = input.flare; return; }
+    if (m.dead || s.crashed) { l.firing = false; l.flareQueue = 0; clearLock(l.lock); l.prevFire = input.fire; l.prevFlare = input.flare; return; }
     l.mode = input.mode;
 
-    if (input.flare && !l.prevFlare && l.flares > 0 && l.flareCd <= 0) this.dropFlares(m);
+    if (input.flare && !l.prevFlare && l.flares > 0 && l.flareCd <= 0) {
+      l.flareQueue = Math.min(P.flares.salvo, l.flares); l.flareGap = 0; l.flareCd = P.flares.cooldown;
+      this.events.push({ kind: 'flare', owner: m.id });
+    }
     l.prevFlare = input.flare;
+    if (l.flareQueue > 0) l.flareGap -= dt;
+    while (l.flareQueue > 0 && l.flareGap <= 0 && l.flares > 0) { this.dropFlare(m); l.flareGap += P.flares.interval; }
 
     l.firing = input.fire && l.mode === 'gun' && l.ammo > 0;
     if (l.firing) {
@@ -193,25 +198,19 @@ export class Combat {
     this.events.push({ kind: 'launch', shooter: m.id, missile: ms.id });
   }
 
-  private dropFlares(m: Member): void {
+  /** Releases the next flare of a salvo, on the opposite side to the last one. */
+  private dropFlare(m: Member): void {
     const fp = P.flares, s = m.state, l = m.loadout;
-    const n = Math.min(fp.salvo, l.flares);
-    l.flares -= n; l.flareCd = fp.cooldown;
-    const fresh: Flare[] = [];
-    for (let i = 0; i < n; i++) {
-      const side = i % 2 === 0 ? -1 : 1;
-      _w.set(side * (6 + this.rand() * 6), -3 - this.rand() * 3, 4 + this.rand() * 4).applyQuaternion(s.q);
-      const f: Flare = { id: this.nextId++, owner: m.id, pos: s.pos.clone().add(new Vector3(0, -0.6, 0)), vel: s.vel.clone().add(_w), age: 0 };
-      this.flares.push(f); fresh.push(f);
-    }
-    this.events.push({ kind: 'flare', owner: m.id });
-    // each missile chasing this aircraft gets one chance per new flare in its seeker to switch to it
+    const side = (fp.salvo - l.flareQueue) % 2 === 0 ? -1 : 1;
+    l.flares--; l.flareQueue--;
+    _w.set(side * (6 + this.rand() * 6), -3 - this.rand() * 3, 4 + this.rand() * 4).applyQuaternion(s.q);
+    const f: Flare = { id: this.nextId++, owner: m.id, pos: s.pos.clone().add(new Vector3(0, -0.6, 0)), vel: s.vel.clone().add(_w), age: 0 };
+    this.flares.push(f);
+    // each missile chasing this aircraft gets one chance per flare in its seeker to switch to it
     for (const ms of this.missiles) {
       if (ms.targetId !== m.id || ms.flareId !== null) continue;
-      for (const f of fresh) {
-        _v.copy(f.pos).sub(ms.pos);
-        if (_v.angleTo(ms.vel) <= P.missile.seekerHalfAngle && this.rand() < fp.decoyChance) { ms.flareId = f.id; break; }
-      }
+      _v.copy(f.pos).sub(ms.pos);
+      if (_v.angleTo(ms.vel) <= P.missile.seekerHalfAngle && this.rand() < fp.decoyChance) ms.flareId = f.id;
     }
   }
 

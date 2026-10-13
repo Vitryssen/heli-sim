@@ -39,8 +39,8 @@ After that, server changes deploy automatically (`.github/workflows/deploy-serve
 `src/combat/` is shared by solo play (runs in the browser) and the server (authoritative in rooms). It has no DOM code and is covered by `tests/combat.test.ts`.
 
 - **Miniguns:** 50 rounds/s from two pods, 3,000 rounds, 1.2 km range. Hits are instant ray checks against the airframe spheres. Online, the server rewinds the other aircraft to where your screen showed them (up to 250 ms), so you aim at what you see.
-- **Missiles:** 4 carried. Hold a target in the ±6° seeker for 1.5 s to lock, then fire. They use proportional navigation with a 20 g limit, a 5 m proximity fuse, 75 % damage plus splash, and self-destruct after 8 s.
-- **Flares:** 30, dropped in salvos of 4. Each flare inside a missile's seeker has a 30 % chance to decoy it, so a salvo breaks most locks.
+- **Missiles:** 4 carried. Hold a target in the ±6° seeker for 1.5 s to lock, then fire. They cruise at 180 m/s using proportional navigation with a 20 g limit, a 5 m proximity fuse, 75 % damage plus splash, and self-destruct after 12 s.
+- **Flares:** 24, dropped in salvos of 6 (four salvos). A salvo ripples out over 0.4 s, alternating left and right. Each flare inside a missile's seeker has a 30 % chance to decoy it, so a salvo breaks most locks.
 - **Rearm and repair** by sitting 5 s on any H pad.
 - **Practice targets:** six trucks around the town and Hilltop, and three drones flying figure-8s. They respawn after 20 s.
 - **Minimap:** heading-up, range 500 m / 1 km / 2 km (`M`). Shows pilots, targets and missiles.

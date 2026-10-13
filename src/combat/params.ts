@@ -23,18 +23,25 @@ export const combatParams = {
     lockTime: 1.5,
     launchSpeed: 40,               // m/s off the rail, on top of the aircraft's speed
     boost: 0.4,                    // s to reach cruise speed
-    speed: 300,
+    speed: 180,                    // m/s: slow enough to give the target time to react
     navGain: 4,                    // proportional navigation constant
     maxG: 20,
     fuse: 5,                       // m proximity fuse
     damage: 75,
     splash: 10,
     splashDamage: 30,
-    life: 8,
+    life: 12,                      // s: about 2 km at cruise, matching the lock range
     seekerHalfAngle: 30 * DEG,     // flares inside this cone can decoy the missile
     rails: [[-1.35, -0.6, -0.3], [1.35, -0.6, -0.3]] as [number, number, number][],
   },
-  flares: { count: 30, salvo: 4, cooldown: 1, life: 3, decoyChance: 0.3 },
+  flares: {
+    count: 24,                     // 4 salvos, one per missile a pilot carries
+    salvo: 6,
+    interval: 0.08,                // s between flares in a salvo, alternating left and right
+    cooldown: 1,                   // s from the start of one salvo to the next
+    life: 3,
+    decoyChance: 0.3,
+  },
   respawn: 5,                      // s after destruction
   rearm: 5,                        // s settled on a pad
   killCredit: 10,                  // s: a crash this soon after being hit counts as a kill for the shooter
