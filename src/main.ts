@@ -1,5 +1,5 @@
 import './style.css';
-import { Euler, Vector3 } from 'three';
+import { Euler, Quaternion, Vector3 } from 'three';
 import { createScene, SUN_DIR } from './render/scene';
 import { buildHeliModel } from './render/heliModel';
 import { Dust } from './render/dust';
@@ -276,6 +276,10 @@ for (const b of document.querySelectorAll('button')) b.addEventListener('keydown
 // ---- loop
 const _hub = new Vector3(), _eu = new Euler();
 let last = performance.now(), accum = 0, simT = 0, lastPanel = 0, lastMap = 0;
+// solo flies at 60 Hz, so the aircraft is drawn between its last two steps; drawn at the latest
+// step, a faster screen sees it stand still every other frame and the chase camera judders
+const pose = { prevPos: new Vector3(), prevQ: new Quaternion(), endPos: new Vector3(), endQ: new Quaternion(), alpha: 0 };
+const _viewPos = new Vector3(), _viewQ = new Quaternion();
 
 function frame(now: number): void {
   requestAnimationFrame(frame);
@@ -302,7 +306,9 @@ function frame(now: number): void {
         net.tick(menu.open ? NEUTRAL : input, prefs.assists, { reset: resetRequested }, weapon);
         resetRequested = false;
       } else {
+        pose.prevPos.copy(s.pos); pose.prevQ.copy(s.q);
         for (let k = 0; k < SUBSTEPS; k++) { step(s, input, prefs.assists, world, SIM_DT, simT, params); simT += SIM_DT; }
+        pose.endPos.copy(s.pos); pose.endQ.copy(s.q);
         const events = soloCombat.tick(NET_DT, new Map([[SOLO_ID, weapon]]), {
           padUnder: st => landings.padUnder(st),
           respawn: () => { session.reset(); rig.snap(); messages.clear(); info('Respawned', 'Raise the collective to start the engine', 2.5); },
@@ -312,6 +318,7 @@ function frame(now: number): void {
       weapon.flare = flareRequested = false;
       accum -= NET_DT;
     }
+    pose.alpha = accum / NET_DT;
     if (!wasOn && s.engineOn) info('Engine start', 'Keep holding until the skids lift', 2.5);
     const n = session.update(dt, !net);
     if (n && n.title === 'Crashed') crashed(n.detail.split('\n')[0]);
@@ -323,6 +330,9 @@ function frame(now: number): void {
   // our aircraft is drawn at the smoothed pose in multiplayer, so corrections never pop
   let viewState: HeliState = s;
   if (net) { net.updateView(dt); viewState = { ...s, pos: net.viewPos, q: net.viewQ }; }
+  else if (s.pos.equals(pose.endPos) && s.q.equals(pose.endQ)) {   // not moved since its last step (a reset or respawn would have)
+    viewState = { ...s, pos: _viewPos.copy(pose.prevPos).lerp(s.pos, pose.alpha), q: _viewQ.copy(pose.prevQ).slerp(s.q, pose.alpha) };
+  }
   const remoteViews: RemoteView[] = net ? net.remoteViews() : [];
   remotes.update(remoteViews, dt);
 
