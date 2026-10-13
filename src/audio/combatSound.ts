@@ -1,29 +1,53 @@
+/** Volume settings, 1 = the tuned default. */
+export interface Volumes { master: number; rotor: number; weapons: number; alerts: number }
+
 /**
- * Combat audio: minigun, missile launch, explosions, lock tones and the missile warning, plus the
- * tutorial's gate chime.
+ * Combat audio on two channels: weapons (minigun and its barrel motor, missile launch, explosions,
+ * hit marker) and alerts (lock tones, missile warning, the tutorial's gate chime).
  * Synthesized with WebAudio; starts when the player switches sound on (a user gesture).
  */
 export class CombatSound {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  private weapons: GainNode | null = null;
+  private alerts: GainNode | null = null;
   private noise: AudioBuffer | null = null;
   private gun: GainNode | null = null;
+  private motor: { osc: OscillatorNode; bp: BiquadFilterNode; gain: GainNode; whirBp: BiquadFilterNode; whir: GainNode } | null = null;
   private tone: { osc: OscillatorNode; gain: GainNode } | null = null;
   private warn: { osc: OscillatorNode; gain: GainNode } | null = null;
   private on = false;
+  private vol: Volumes = { master: 1, rotor: 1, weapons: 1, alerts: 1 };
 
   setEnabled(on: boolean): void {
     this.on = on;
     if (on && !this.ctx) this.init();
     if (this.ctx && on) void this.ctx.resume();
-    if (this.master && this.ctx) this.master.gain.setTargetAtTime(on ? 0.6 : 0, this.ctx.currentTime, 0.05);
+    this.applyVolumes();
   }
 
-  /** Continuous sounds, once per frame. */
-  update(gunFiring: boolean, lock: 'none' | 'search' | 'locked', missileMode: boolean, warning: 'none' | 'locked' | 'missile'): void {
-    if (!this.ctx || !this.on || !this.gun || !this.tone || !this.warn) return;
+  setVolumes(v: Volumes): void { this.vol = { ...v }; this.applyVolumes(); }
+
+  private applyVolumes(): void {
+    if (!this.ctx || !this.master || !this.weapons || !this.alerts) return;
+    const t = this.ctx.currentTime;
+    this.master.gain.setTargetAtTime(this.on ? 0.6 * this.vol.master : 0, t, 0.05);
+    this.weapons.gain.setTargetAtTime(this.vol.weapons, t, 0.05);
+    this.alerts.gain.setTargetAtTime(this.vol.alerts, t, 0.05);
+  }
+
+  /** Continuous sounds, once per frame. `gunSpin` is how fast the barrels turn, 0..1. */
+  update(gunFiring: boolean, gunSpin: number, lock: 'none' | 'search' | 'locked', missileMode: boolean, warning: 'none' | 'locked' | 'missile'): void {
+    if (!this.ctx || !this.on || !this.gun || !this.motor || !this.tone || !this.warn) return;
     const t = this.ctx.currentTime;
     this.gun.gain.setTargetAtTime(gunFiring ? 0.5 : 0, t, 0.015);
+    // barrel motor: an electric whine and the air whir of the barrels, rising with their speed
+    const m = this.motor, hz = 90 + 520 * gunSpin;
+    m.osc.frequency.setTargetAtTime(hz, t, 0.03);
+    m.bp.frequency.setTargetAtTime(hz * 3, t, 0.03);
+    m.gain.gain.setTargetAtTime(0.05 * gunSpin, t, 0.03);
+    m.whirBp.frequency.setTargetAtTime(400 + 900 * gunSpin, t, 0.03);
+    m.whir.gain.setTargetAtTime(0.09 * gunSpin, t, 0.03);
     // seeker: slow beeps while searching, steady high tone when locked
     let toneGain = 0;
     if (missileMode && lock === 'search') toneGain = (t * 5) % 1 < 0.5 ? 0.12 : 0;
@@ -45,36 +69,36 @@ export class CombatSound {
   }
 
   hitMarker(): void {
-    if (!this.ctx || !this.on || !this.master) return;
+    if (!this.ctx || !this.on || !this.weapons) return;
     const t = this.ctx.currentTime, o = this.ctx.createOscillator(), g = this.ctx.createGain();
     o.type = 'square'; o.frequency.value = 2200;
     g.gain.setValueAtTime(0.06, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
-    o.connect(g).connect(this.master);
+    o.connect(g).connect(this.weapons);
     o.start(t); o.stop(t + 0.06);
   }
 
   /** Rising two-note chime for flying through a tutorial gate. */
   gate(): void {
-    if (!this.ctx || !this.on || !this.master) return;
+    if (!this.ctx || !this.on || !this.alerts) return;
     const t = this.ctx.currentTime;
     [[880, 0], [1320, 0.07]].forEach(([hz, at]) => {
       const o = this.ctx!.createOscillator(), g = this.ctx!.createGain();
       o.type = 'sine'; o.frequency.value = hz;
       g.gain.setValueAtTime(0.0001, t + at); g.gain.exponentialRampToValueAtTime(0.26, t + at + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + at + 0.35);
-      o.connect(g).connect(this.master!);
+      o.connect(g).connect(this.alerts!);
       o.start(t + at); o.stop(t + at + 0.4);
     });
   }
 
   private burst(level: number, seconds: number, fromHz: number, toHz: number): void {
-    if (!this.ctx || !this.on || !this.master || !this.noise) return;
+    if (!this.ctx || !this.on || !this.weapons || !this.noise) return;
     const t = this.ctx.currentTime;
     const src = this.ctx.createBufferSource(); src.buffer = this.noise;
     const lp = this.ctx.createBiquadFilter(); lp.type = 'lowpass';
     lp.frequency.setValueAtTime(fromHz, t); lp.frequency.exponentialRampToValueAtTime(toHz, t + seconds);
     const g = this.ctx.createGain();
     g.gain.setValueAtTime(level, t); g.gain.exponentialRampToValueAtTime(0.0001, t + seconds);
-    src.connect(lp).connect(g).connect(this.master);
+    src.connect(lp).connect(g).connect(this.weapons);
     src.start(t); src.stop(t + seconds);
   }
 
@@ -83,22 +107,36 @@ export class CombatSound {
     if (!AC) return;
     const ctx = new AC();
     const master = ctx.createGain(); master.gain.value = 0; master.connect(ctx.destination);
+    const weapons = ctx.createGain(), alerts = ctx.createGain();
+    weapons.connect(master); alerts.connect(master);
     const noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = noise.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
 
     const { gate: gun, output: gunOut } = minigunVoice(ctx, noise);
     gun.gain.value = 0;
-    gunOut.connect(master);
+    gunOut.connect(weapons);
+
+    const motorOsc = ctx.createOscillator(); motorOsc.type = 'sawtooth'; motorOsc.frequency.value = 90;
+    const motorBp = ctx.createBiquadFilter(); motorBp.type = 'bandpass'; motorBp.Q.value = 4;
+    const motorGain = ctx.createGain(); motorGain.gain.value = 0;
+    motorOsc.connect(motorBp).connect(motorGain).connect(weapons);
+    const whirSrc = ctx.createBufferSource(); whirSrc.buffer = noise; whirSrc.loop = true;
+    const whirBp = ctx.createBiquadFilter(); whirBp.type = 'bandpass'; whirBp.Q.value = 1.5;
+    const whir = ctx.createGain(); whir.gain.value = 0;
+    whirSrc.connect(whirBp).connect(whir).connect(weapons);
+    motorOsc.start(); whirSrc.start();
 
     const mkTone = (type: OscillatorType, hz: number) => {
       const osc = ctx.createOscillator(); osc.type = type; osc.frequency.value = hz;
       const gain = ctx.createGain(); gain.gain.value = 0;
-      osc.connect(gain).connect(master); osc.start();
+      osc.connect(gain).connect(alerts); osc.start();
       return { osc, gain };
     };
-    this.ctx = ctx; this.master = master; this.noise = noise; this.gun = gun;
+    this.ctx = ctx; this.master = master; this.weapons = weapons; this.alerts = alerts; this.noise = noise; this.gun = gun;
+    this.motor = { osc: motorOsc, bp: motorBp, gain: motorGain, whirBp, whir };
     this.tone = mkTone('sine', 900);
     this.warn = mkTone('square', 1600);
+    this.applyVolumes();
   }
 }
 

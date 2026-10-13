@@ -3,8 +3,9 @@ import type { Keyboard } from '../input/keyboard';
 import type { Prefs } from '../game/prefs';
 import type { AssistFlags } from '../sim/state';
 import type { Lesson } from '../tutorial/lessons';
+import type { Volumes } from '../audio/combatSound';
 
-export type Tab = 'help' | 'controls' | 'assists' | 'mouse' | 'multiplayer' | 'tutorial';
+export type Tab = 'help' | 'controls' | 'assists' | 'mouse' | 'sound' | 'multiplayer' | 'tutorial';
 
 export interface MultiplayerView {
   configured: boolean;
@@ -28,6 +29,9 @@ export interface MenuHooks {
   onLesson(id: string): void;
   onLessonRestart(): void;
   onLeaveTutorial(): void;
+  soundOn(): boolean;
+  onSoundToggle(): void;
+  onVolume(v: Volumes): void;
 }
 
 const ASSIST_ROWS: { k: keyof AssistFlags; label: string; detail: string }[] = [
@@ -37,7 +41,7 @@ const ASSIST_ROWS: { k: keyof AssistFlags; label: string; detail: string }[] = [
   { k: 'turnCoord', label: 'Turn coordination', detail: 'Yaws the nose into banked turns above about 30 km/h.' },
 ];
 
-/** Settings overlay: help, key rebinding, assists, mouse, multiplayer and the tutorial. Pauses the game while open. */
+/** Settings overlay: help, key rebinding, assists, mouse, sound, multiplayer and the tutorial. Pauses the game while open. */
 export class SettingsMenu {
   open = false;
   private root = document.getElementById('menu')!;
@@ -110,6 +114,8 @@ export class SettingsMenu {
       this.renderMultiplayer();
     } else if (this.tab === 'tutorial') {
       this.renderTutorial();
+    } else if (this.tab === 'sound') {
+      this.renderSound();
     } else {
       this.body.innerHTML = `
         <label class="range"><span>Sensitivity <output id="sensOut">${Math.round(this.prefs.sensitivity * 100)}%</output></span>
@@ -119,6 +125,33 @@ export class SettingsMenu {
       sens.oninput = () => { document.getElementById('sensOut')!.textContent = Math.round(+sens.value * 100) + '%'; this.hooks.onMouse(+sens.value, inv.checked); };
       inv.onchange = () => this.hooks.onMouse(+sens.value, inv.checked);
     }
+  }
+
+  private renderSound(): void {
+    const on = this.hooks.soundOn(), v = this.prefs.volume;
+    const rows: [keyof Volumes, string, string][] = [
+      ['master', 'Master', 'Everything at once'],
+      ['rotor', 'Helicopter', 'Rotor and engine (quieter still in third person)'],
+      ['weapons', 'Weapons', 'Miniguns, missile launches, explosions, hit marker'],
+      ['alerts', 'Alerts', 'Lock tones, missile warning, tutorial chimes'],
+    ];
+    this.body.innerHTML = `
+      <div class="menu-row"><button class="tg" id="sndToggle" aria-pressed="${on}"><span class="led"></span>Sound ${on ? 'on' : 'off'}</button>
+        <span class="note">${on ? '' : 'Volumes apply once sound is on'}</span></div>
+      ${rows.map(([k, label, detail]) => `
+        <label class="range"><span>${label} <output id="out-${k}">${Math.round(v[k] * 100)}%</output> <small>${detail}</small></span>
+          <input type="range" id="vol-${k}" min="0" max="1.5" step="0.05" value="${v[k]}"></label>`).join('')}
+      <div class="menu-row"><button class="tg" id="sndReset">Reset to defaults</button></div>`;
+    document.getElementById('sndToggle')!.onclick = () => { this.hooks.onSoundToggle(); this.render(); };
+    for (const [k] of rows) {
+      const input = document.getElementById(`vol-${k}`) as HTMLInputElement;
+      input.oninput = () => {
+        v[k] = +input.value;
+        document.getElementById(`out-${k}`)!.textContent = Math.round(v[k] * 100) + '%';
+        this.hooks.onVolume(v);
+      };
+    }
+    document.getElementById('sndReset')!.onclick = () => { for (const [k] of rows) v[k] = 1; this.hooks.onVolume(v); this.render(); };
   }
 
   private renderTutorial(): void {

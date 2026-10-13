@@ -49,11 +49,12 @@ The old landing time trial and the target-pad beacon are gone; landings are stil
 
 ## Tutorial
 
-Settings → Tutorial has nine solo lessons, flown through gates and markers in the world, with a step panel under the top-left buttons:
+Settings → Tutorial has ten solo lessons, flown through gates and markers in the world, with a step panel under the top-left buttons:
 
 - **Basics:** lift-off and hover; pedal turns and hover-taxi.
 - **Forward flight:** speed, banked turns and stopping without ballooning.
 - **Landing:** Base from the south; the rooftop pad.
+- **Combat:** shoot a truck with the miniguns, lock and fire a missile, then decoy a harmless training missile with flares (another follows if one gets through).
 - **Assists:** one lesson each for stability, auto-hover, envelope limits and turn coordination. Each flies the same task twice, first with the assist on and then off, and compares the runs (wobble, height drift with the collective released, max pitch, sideslip).
 
 A lesson sets the assists for each run; the assist keys are locked until you leave. A crash restarts the run, and `R` restarts it on demand. **Leave tutorial** (bottom of the menu, shown while a lesson is loaded) puts you back on Base with your own assists. Finished lessons are remembered in the browser. `src/tutorial/` holds the lessons and the runner (no DOM), covered by `tests/tutorial.test.ts`.
@@ -86,6 +87,10 @@ A lesson sets the assists for each run; the assist keys are locked until you lea
 All tunables live in `src/sim/params.ts`. In `npm run dev`, press **F2** for a live tuning panel; it isn't included in production builds.
 
 `prototype/index.html` is the original single-file version, kept for reference.
+
+## Sound
+
+Everything is synthesized with WebAudio (no audio files). Settings → Sound has master, helicopter, weapons and alerts volumes (0–150 %, saved in the browser). The minigun is fitted to a recording of a real AH-6 firing (spectrum and ~59 rounds/s rhythm), with its barrel motor spinning up and winding down and an outdoor echo after each burst; the rotor is quieter in third person.
 
 ## Credits
 

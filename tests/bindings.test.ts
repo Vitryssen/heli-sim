@@ -57,11 +57,12 @@ describe('prefs', () => {
   test('round-trip and defaults', () => {
     const store = memStore();
     expect(loadPrefs(store)).toEqual(DEFAULT_PREFS);
-    savePrefs({ assists: { stability: false, autoHover: true, envelope: false, turnCoord: true }, sensitivity: 1.5, invertY: true, name: 'Ace', lessons: ['liftoff'] }, store);
+    savePrefs({ assists: { stability: false, autoHover: true, envelope: false, turnCoord: true }, sensitivity: 1.5, invertY: true, name: 'Ace', lessons: ['liftoff'], volume: { master: 0.8, rotor: 0.5, weapons: 1.2, alerts: 1 } }, store);
     const p = loadPrefs(store);
     expect(p.assists.stability).toBe(false);
     expect(p.sensitivity).toBe(1.5);
     expect(p.invertY).toBe(true);
     expect(p.lessons).toEqual(['liftoff']);
+    expect(p.volume).toEqual({ master: 0.8, rotor: 0.5, weapons: 1.2, alerts: 1 });
   });
 });

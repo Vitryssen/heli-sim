@@ -20,7 +20,7 @@ import { Landings } from './game/landings';
 import { Session } from './game/session';
 import { loadPrefs, savePrefs } from './game/prefs';
 import { Combat, type CombatEvent } from './combat/combat';
-import { createLoadout, type WeaponInput, type WeaponMode } from './combat/loadout';
+import { createLoadout, lockState, type WeaponInput, type WeaponMode } from './combat/loadout';
 import { clearLock, updateLock, type LockCandidate } from './combat/lock';
 import { soloView, type CombatView } from './combat/view';
 import { Bindings, keyLabel, type Action } from './input/bindings';
@@ -34,7 +34,7 @@ import { KillFeed, escapeHtml } from './ui/killFeed';
 import { Messages } from './ui/messages';
 import { SettingsMenu, type MultiplayerView } from './ui/settingsMenu';
 import { TutorialPanel } from './ui/tutorialPanel';
-import { buildLessons } from './tutorial/lessons';
+import { buildLessons, type CombatProbe } from './tutorial/lessons';
 import { Tutorial, type TutorialEvent } from './tutorial/tutorial';
 import { RotorSound } from './audio/rotorSound';
 import { CombatSound } from './audio/combatSound';
@@ -84,10 +84,21 @@ let flareRequested = false;
 const netLock = createLoadout().lock;   // client-side seeker in multiplayer, for instant tones and boxes
 
 // tutorial (solo only): a lesson sets the assists for each of its runs
-const lessons = buildLessons(layout.pads);
+const lessons = buildLessons(layout);
 const tutorial = new Tutorial(st => landings.padUnder(st));
 const tutPanel = new TutorialPanel(text => text.replace(/\{(\w+)\}/g, (_, a: string) => `<kbd>${keyLabel(bindings.key(a as Action))}</kbd>`));
 const assistsNow = (): AssistFlags => tutorial.assists ?? prefs.assists;
+// the weapons lesson's training missile: inbound until it goes for a flare (decoyed) or reaches you (hit)
+let threat: { id: number; state: CombatProbe['threat'] } | null = null;
+function combatProbe(): CombatProbe {
+  const me = soloCombat.members.get(SOLO_ID)!;
+  if (threat?.state === 'inbound') {
+    const ms = soloCombat.missiles.find(m => m.id === threat!.id);
+    if (!ms) threat.state = 'hit';
+    else if (ms.flareId !== null) threat.state = 'decoyed';
+  }
+  return { mode: me.loadout.mode, lock: lockState(me.loadout), targetKills: me.targetKills, threat: threat?.state ?? 'none' };
+}
 
 // ---- multiplayer
 const SERVER_URL: string = import.meta.env.VITE_SERVER_URL || (import.meta.env.DEV ? `ws://${location.hostname}:8787` : '');
@@ -119,6 +130,9 @@ const menu: SettingsMenu = new SettingsMenu(bindings, keyboard, prefs, {
   onLesson: id => startLesson(id),
   onLessonRestart: () => { onTutorial(tutorial.restart()); menu.close(); },
   onLeaveTutorial: () => leaveTutorial(),
+  soundOn: () => sound.on,
+  onSoundToggle: () => toggleSound(),
+  onVolume: () => { applyVolumes(); savePrefs(prefs); },
 });
 
 function joinRoom(rawRoom: string, rawName: string): void {
@@ -275,8 +289,17 @@ function leaveTutorial(): void {
 function onTutorial(e: TutorialEvent | null): void {
   if (!e) return;
   if (e.kind === 'gate') { combatSound.gate(); return; }
+  if (e.kind === 'incoming') {
+    // from ahead and to the left, a little higher, so you can see it coming
+    _eu.setFromQuaternion(s.q, 'YXZ');
+    const from = new Vector3(-250, 40, -500).applyAxisAngle(new Vector3(0, 1, 0), _eu.y).add(s.pos);
+    threat = { id: soloCombat.trainingMissile(SOLO_ID, from), state: 'inbound' };
+    return;
+  }
   const L = tutorial.lesson!;
   if (e.kind === 'place') {
+    threat = null;
+    soloCombat.resetPractice();                                // every run starts with all trucks and drones up
     const a = e.at;
     if (a.cold) placeOnGround(s, a.x, a.y, a.z, a.heading);
     else placeInFlight(s, a.x, a.y, a.z, a.speed, a.heading, params.rotor.omegaNominal);
@@ -291,6 +314,10 @@ function onTutorial(e: TutorialEvent | null): void {
 function syncCameraView(): void {
   $('vignette').hidden = rig.mode !== 'Cockpit';
   heli.body.visible = !!heli.cabin || rig.mode !== 'Cockpit';   // the built-in model is flown from the drawn cockpit instead
+}
+function applyVolumes(): void {
+  sound.volume = prefs.volume.master * prefs.volume.rotor;
+  combatSound.setVolumes(prefs.volume);
 }
 function toggleSound(): void {
   const on = sound.toggle();
@@ -335,7 +362,7 @@ for (const b of document.querySelectorAll('button')) b.addEventListener('keydown
 
 // ---- loop
 const _hub = new Vector3(), _eu = new Euler();
-let last = performance.now(), accum = 0, simT = 0, lastPanel = 0, lastMap = 0;
+let last = performance.now(), accum = 0, simT = 0, lastPanel = 0, lastMap = 0, gunSpin = 0;
 // flight runs at 60 Hz, so the aircraft is drawn between its last two steps (solo here, multiplayer
 // in OwnView); drawn at the latest step, a faster screen sees it stand still every other frame
 const pose = { prevPos: new Vector3(), prevQ: new Quaternion(), endPos: new Vector3(), endQ: new Quaternion(), alpha: 0 };
@@ -375,7 +402,7 @@ function frame(now: number): void {
           respawn: () => { if (tutorial.active) { onTutorial(tutorial.restart()); return; } session.reset(); rig.snap(); messages.clear(); info('Respawned', 'Raise the collective to start the engine', 2.5); },
         });
         onCombat(events, SOLO_ID, () => 'You');
-        for (const e of tutorial.tick(NET_DT, s, input)) onTutorial(e);
+        if (tutorial.active) for (const e of tutorial.tick(NET_DT, s, input, combatProbe())) onTutorial(e);
       }
       weapon.flare = flareRequested = false;
       accum -= NET_DT;
@@ -423,7 +450,9 @@ function frame(now: number): void {
   heli.rotorTilt.rotation.x = -input.pitch * 0.06 * Math.min(1, rpm);
   heli.rotorTilt.rotation.z = -input.roll * 0.06 * Math.min(1, rpm);
   heli.disc.material.opacity = 0.14 * smooth(0.3, 0.9, rpm);
-  for (const g of heli.guns) if (localFiring) g.rotation.z += 60 * dt;
+  // the barrels spin up in ~0.1 s when firing and wind down over ~0.7 s after
+  gunSpin += ((localFiring ? 1 : 0) - gunSpin) * (1 - Math.exp(-dt / (localFiring ? 0.08 : 0.5)));
+  for (const g of heli.guns) g.rotation.z += 60 * dt * gunSpin;
   heli.missiles.forEach((m, i) => { m.visible = i < cv.self.missiles; });
 
   // weapons, targets and smoke
@@ -460,7 +489,7 @@ function frame(now: number): void {
   if (now - lastMap > 33) { lastMap = now; drawMap(viewState, remoteViews, cv); }
   if (now - lastPanel > 500) { lastPanel = now; updatePanels(cv); }
   sound.update(loadG, rpm, s.engineOn, rig.mode !== 'Cockpit');
-  combatSound.update(localFiring, stores.lock, weaponMode === 'missile', cv.self.warning);
+  combatSound.update(localFiring, gunSpin, stores.lock, weaponMode === 'missile', cv.self.warning);
   feed.tick(now);
   messages.tick(dt);
   kit.renderer.render(kit.scene, kit.camera);
@@ -503,6 +532,7 @@ function updatePanels(cv: CombatView): void {
 
 syncButtons();
 syncKeyLabels();
+applyVolumes();
 syncCameraView();
 reset();
 const linkRoom = new URLSearchParams(location.search).get('room');
