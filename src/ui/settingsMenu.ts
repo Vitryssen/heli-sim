@@ -76,26 +76,16 @@ export class SettingsMenu {
     const k = (a: Action) => `<kbd>${keyLabel(this.bindings.key(a))}</kbd>`;
     if (this.tab === 'help') {
       this.body.innerHTML = `
-        <p>Hold ${k('collectiveUp')} to start the engine and keep holding while the rotor spools up until the skids lift. Hunt the practice targets (orange on the minimap), or other pilots in a multiplayer room. Destroyed aircraft respawn at Base after 5 s.</p>
-        <p><b>Weapons:</b> twin miniguns fire along the small amber ring. Switch to missiles with ${k('weaponToggle')}, keep a target inside the dashed circle for 1.5 s until the box turns red (LOCK), then fire. If you hear the warning tone, drop flares with ${k('flares')}. Land on any <b>H</b> pad and sit still for 5 s to rearm and repair.</p>
+        <p>Hold ${k('collectiveUp')} until the skids lift. Hunt the orange targets on the minimap, or other pilots in a multiplayer room.</p>
         <div class="keys">
-          <span class="h">Control</span><span class="h">Keys</span>
-          <span>Collective</span><span>${k('collectiveUp')} up · ${k('collectiveDown')} down (springs back to neutral)</span>
-          <span>Pitch</span><span>${k('pitchForward')} ${k('pitchBack')} or mouse ↕</span>
-          <span>Roll</span><span>${k('rollLeft')} ${k('rollRight')} or mouse ↔</span>
+          <span>Collective</span><span>${k('collectiveUp')} up · ${k('collectiveDown')} down</span>
+          <span>Pitch · Roll</span><span>${k('pitchForward')} ${k('pitchBack')} · ${k('rollLeft')} ${k('rollRight')} or mouse</span>
           <span>Pedals</span><span>${k('yawLeft')} ${k('yawRight')}</span>
-          <span>Fire · Switch · Flares</span><span>${k('fire')} · ${k('weaponToggle')} · ${k('flares')} (mouse buttons fire once the mouse is captured)</span>
-          <span>Minimap range</span><span>${k('mapRange')} (500 m · 1 km · 2 km)</span>
-          <span>Free look</span><span>hold ${k('freeLook')} or right mouse</span>
-          <span>Assists</span><span>${k('toggleStability')} ${k('toggleAutoHover')} ${k('toggleEnvelope')} ${k('toggleTurnCoord')}</span>
-          <span>Camera · Reset</span><span>${k('camera')} · ${k('reset')}</span>
-          <span>Zoom</span><span>mouse wheel (cockpit: field of view, chase: distance)</span>
-          <span>Settings</span><span>${k('settings')} · Esc closes</span>
+          <span>Fire · Switch · Flares</span><span>${k('fire')} · ${k('weaponToggle')} · ${k('flares')}</span>
         </div>
-        <p><b>Fly fullscreen</b> captures the keyboard, so Ctrl+W lowers the collective instead of closing the tab (Chrome and Edge). In a window, the browser asks before leaving while the engine runs.</p>
-        <p><b>It carries momentum.</b> Pitch and roll set a rotation rate, so the aircraft keeps turning after you let go. Neutral collective only just holds you up. Pull the nose up at speed and the rotor bites: you climb as you slow. Never brake, turn and descend at the same time.</p>
-        <p><b>Mouse:</b> click the view to capture the mouse; Esc releases it. ${k('sensDown')} ${k('sensUp')} change sensitivity.</p>
-        <p><b>Multiplayer:</b> open the Multiplayer tab to create a room and share the link. The game keeps running while this menu is open in a room.</p>`;
+        <p><b>Missiles:</b> hold a target in the dashed circle until LOCK, then fire. Warning tone means flares. Sit still on an <b>H</b> pad for 5 s to rearm.</p>
+        <p><b>It carries momentum:</b> the aircraft keeps turning after you let go, and pulling the nose up at speed makes you climb.</p>
+        <p>Fly fullscreen so Ctrl+W can't close the tab. Every key is listed under Controls.</p>`;
     } else if (this.tab === 'controls') {
       const groups = [...new Set(ACTIONS.map(a => a.group))];
       this.body.innerHTML = groups.map(g => `<h3>${g}</h3><div class="binds">${ACTIONS.filter(a => a.group === g).map(a =>
