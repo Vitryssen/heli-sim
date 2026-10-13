@@ -6,4 +6,5 @@ License: Creative Commons Attribution 4.0 International (CC BY 4.0), https://cre
 
 Changes: vertices welded and meshopt-compressed with glTF-Transform. In the game the model is
 rescaled to 90 %, turned to face the game's axes, its glass material is replaced with a plain
-transparent one, and the drone targets are recoloured and shown without weapons.
+transparent one, the flight controls and minigun barrels are split out so they can move, the rocket
+pods are replaced with two-missile launchers, and the drone targets are recoloured and shown without weapons.

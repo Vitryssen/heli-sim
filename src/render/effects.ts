@@ -127,14 +127,17 @@ export class Effects {
    * One aircraft firing its guns this frame: muzzle flashes, and a tracer every fifth round flying out
    * at muzzle speed to whatever it would hit. `id` keeps the round counter per shooter.
    */
+  /** Where tracers leave the guns, in body axes; the 3D model's muzzles when it has loaded. */
+  muzzles: readonly (readonly [number, number, number])[] = combatParams.gun.mounts.map(m => [m[0], m[1], m[2] - 0.45] as const);
+
   gunfire(id: number, pos: THREE.Vector3, q: THREE.Quaternion, vel: THREE.Vector3, dt: number): void {
     const g = combatParams.gun;
     let acc = (this.gunAcc.get(id) ?? 0) + g.rate * dt;
     let round = this.gunRound.get(id) ?? 0;
     while (acc >= 1) {
       acc -= 1;
-      const m = g.mounts[round % g.mounts.length];
-      const muzzle = this._v.set(m[0], m[1], m[2] - 0.45).applyQuaternion(q).add(pos);
+      const m = this.muzzles[round % this.muzzles.length];
+      const muzzle = this._v.set(m[0], m[1], m[2]).applyQuaternion(q).add(pos);
       if (round % 2 === 0) this.fire.emit(muzzle.x, muzzle.y, muzzle.z, vel.x, vel.y, vel.z, 0.05, 0.9, 0.9);
       if (round % g.tracerEvery === 0) {
         const sx = (Math.random() * 2 - 1) * g.spread, sy = (Math.random() * 2 - 1) * g.spread;

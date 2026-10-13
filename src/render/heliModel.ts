@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { COCKPIT_EYE, HUB, ROTOR_RADIUS } from '../sim/geometry';
-import { CABIN, heliAsset, MAIN_ROTOR, TAIL_ROTOR, type ScreenSpot } from './heliAsset';
+import { CABIN, CONTROL, GUN, heliAsset, MAIN_ROTOR, MISSILE, MUZZLES, TAIL_ROTOR, type ScreenSpot } from './heliAsset';
+import type { PilotInput } from '../sim/state';
 
 export interface HeliModel {
   root: THREE.Group;
@@ -10,6 +11,8 @@ export interface HeliModel {
   eye: THREE.Vector3;
   /** The model's own cabin and where its live displays go; absent for the built-in model, which uses the drawn cockpit instead. */
   cabin?: { pfd: ScreenSpot; eng: ScreenSpot };
+  /** The model's flight controls (both seats), for `poseControls`. */
+  controls?: Record<keyof typeof CONTROL, THREE.Object3D[]>;
   rotorTilt: THREE.Group;
   mainRotor: THREE.Group;
   tailRotor: THREE.Group;
@@ -18,6 +21,8 @@ export interface HeliModel {
   guns: THREE.Group[];
   /** Missiles on the rails, outermost first; hide them as they are fired. */
   missiles: THREE.Mesh[];
+  /** Where tracers leave the guns, in body axes (default: the combat gun mounts). */
+  muzzles?: readonly [number, number, number][];
 }
 
 export interface HeliOptions { bodyColor?: number; weapons?: boolean }
@@ -60,14 +65,29 @@ function fromAsset(asset: THREE.Group, opts: HeliOptions): HeliModel {
     const mesh = o as THREE.Mesh;
     if (!mesh.isMesh) return;
     const name = (mesh.material as THREE.Material).name;
-    if (opts.weapons === false && (name === 'armas' || name === 'cargador')) mesh.visible = false;
+    if (opts.weapons === false && (name === 'armas' || name === 'cargador' || mesh.userData.weapon)) mesh.visible = false;
     if (opts.bodyColor !== undefined && name === 'base') {
       const mat = (mesh.material as THREE.MeshStandardMaterial).clone();
       mat.map = null; mat.color.set(opts.bodyColor);
       mesh.material = mat;
     }
   });
-  return { root, body, eye: CABIN.eye, cabin: CABIN, rotorTilt, mainRotor, tailRotor, disc: d, guns: [], missiles: [] };
+  const controls = Object.fromEntries(Object.entries(CONTROL).map(([k, name]) =>
+    [k, ['L', 'R'].map(s => body.getObjectByName(`${name}_${s}`)).filter((o): o is THREE.Object3D => !!o)])) as Record<keyof typeof CONTROL, THREE.Object3D[]>;
+  const guns = ['L', 'R'].map(s => body.getObjectByName(`${GUN}_${s}`)).filter((o): o is THREE.Group => !!o);
+  const missiles = [0, 1, 2, 3].map(i => body.getObjectByName(`${MISSILE}_${i}`)).filter((o): o is THREE.Mesh => !!o);
+  if (opts.weapons === false) { guns.length = 0; missiles.length = 0; }
+  return { root, body, eye: CABIN.eye, cabin: CABIN, controls, rotorTilt, mainRotor, tailRotor, disc: d, guns, missiles, muzzles: MUZZLES };
+}
+
+/** Moves the model's sticks and pedals with the pilot's inputs (same throws as the drawn cockpit). */
+export function poseControls(m: HeliModel, input: PilotInput): void {
+  const c = m.controls;
+  if (!c) return;
+  for (const g of c.cyclic) g.rotation.set(-input.pitch * 0.22, 0, -input.roll * 0.22);
+  for (const g of c.collective) g.rotation.x = input.collective * 0.16;
+  for (const g of c.pedalL) g.position.z = g.userData.z0 + input.yaw * 0.05;
+  for (const g of c.pedalR) g.position.z = g.userData.z0 - input.yaw * 0.05;
 }
 
 /** MH-6-style egg fuselage, tail boom, T-tail, skids, six-blade main rotor, gun pods and missile rails. */
