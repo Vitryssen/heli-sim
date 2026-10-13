@@ -56,6 +56,22 @@ button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 #mpList td { padding: 0; }
 #mpList td.n { text-align: right; padding-left: 10px; color: var(--muted); }
 #mpList tr.self td:first-child { color: var(--amber); }
+#tut { width: min(340px, calc(100vw - 24px)); padding: 10px 12px; display: flex; flex-direction: column; gap: 7px; }
+#tut p { margin: 0; font: 400 13px/1.45 var(--f-num); color: #c9d4db; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
+#tut b { color: var(--amber); font-weight: 500; }
+#tut .tut-step { color: var(--ink); font-size: 14px; }
+#tut .tut-intro { font-size: 12px; color: var(--muted); }
+.tut-n { font: 600 12px/1 var(--f-label); letter-spacing: .08em; color: var(--muted); margin-right: 4px; }
+.tut-bar { height: 4px; border-radius: 2px; background: rgba(232, 238, 242, .15); overflow: hidden; }
+.tut-bar span { display: block; height: 100%; background: var(--amber); }
+.tut-where { font-size: 13px; color: var(--ink); }
+.tut-foot { font-size: 10px; opacity: .8; }
+.tut-results { border-collapse: collapse; font: 400 12px/1.3 var(--f-num); }
+.tut-results th { font: 600 11px/1.1 var(--f-label); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); text-align: right; padding: 2px 0 4px 10px; }
+.tut-results td { padding: 2px 0; color: #c9d4db; }
+.tut-results td.n { text-align: right; padding-left: 10px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.lessons { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; align-items: center; font: 400 13px/1.35 var(--f-num); color: #c9d4db; }
+.lessons button.tg { justify-content: flex-start; }
 #feed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font: 500 12px/1.3 var(--f-num); text-shadow: 0 1px 3px rgba(0, 0, 0, .9); }
 #feed li b { color: var(--amber); font-weight: 500; }
 #feed li.kill i { color: var(--red); font-style: normal; }

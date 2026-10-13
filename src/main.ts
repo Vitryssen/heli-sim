@@ -8,10 +8,11 @@ import { Cockpit } from './render/cockpit';
 import { Effects } from './render/effects';
 import { TargetModels } from './render/targets';
 import { RemoteFleet } from './render/remotes';
+import { GateMarkers } from './render/gates';
 import { createLayout } from './world/layout';
 import { createWorld } from './world/world';
 import { buildWorldMeshes } from './world/meshes';
-import { createState, type AssistFlags, type HeliState, type PilotInput } from './sim/state';
+import { createState, placeInFlight, placeOnGround, type AssistFlags, type HeliState, type PilotInput } from './sim/state';
 import { params } from './sim/params';
 import { SIM_DT, step } from './sim/step';
 import { HUB } from './sim/geometry';
@@ -33,6 +34,9 @@ import { Minimap, type MapBlip } from './ui/minimap';
 import { KillFeed, escapeHtml } from './ui/killFeed';
 import { Messages } from './ui/messages';
 import { SettingsMenu, type MultiplayerView } from './ui/settingsMenu';
+import { TutorialPanel } from './ui/tutorialPanel';
+import { buildLessons } from './tutorial/lessons';
+import { Tutorial, type TutorialEvent } from './tutorial/tutorial';
 import { RotorSound } from './audio/rotorSound';
 import { CombatSound } from './audio/combatSound';
 import { NetSession, type NetEvent, type NetStatus, type RemoteView } from './net/client';
@@ -53,6 +57,7 @@ const effects = new Effects(kit.scene, kit.renderer, world);
 const targetModels = new TargetModels(kit.scene);
 const rig = new CameraRig(kit.camera);
 const remotes = new RemoteFleet(kit.scene, kit.renderer);
+const gates = new GateMarkers(kit.scene);
 
 // ---- game state
 const s = createState();
@@ -75,6 +80,12 @@ soloCombat.add(SOLO_ID, 'You', s);
 let weaponMode: WeaponMode = 'gun';
 let flareRequested = false;
 const netLock = createLoadout().lock;   // client-side seeker in multiplayer, for instant tones and boxes
+
+// tutorial (solo only): a lesson sets the assists for each of its runs
+const lessons = buildLessons(layout.pads);
+const tutorial = new Tutorial(st => landings.padUnder(st));
+const tutPanel = new TutorialPanel(text => text.replace(/\{(\w+)\}/g, (_, a: string) => `<kbd>${keyLabel(bindings.key(a as Action))}</kbd>`));
+const assistsNow = (): AssistFlags => tutorial.assists ?? prefs.assists;
 
 // ---- multiplayer
 const SERVER_URL: string = import.meta.env.VITE_SERVER_URL || (import.meta.env.DEV ? `ws://${location.hostname}:8787` : '');
@@ -102,11 +113,16 @@ const menu: SettingsMenu = new SettingsMenu(bindings, keyboard, prefs, {
   onJoin: (room, name) => joinRoom(room, name),
   onLeave: () => leaveRoom(),
   defaultName: () => prefs.name,
+  tutorial: () => ({ lessons, done: prefs.lessons, current: tutorial.lesson }),
+  onLesson: id => startLesson(id),
+  onLessonRestart: () => { onTutorial(tutorial.restart()); menu.close(); },
+  onLeaveTutorial: () => leaveTutorial(),
 });
 
 function joinRoom(rawRoom: string, rawName: string): void {
   if (!SERVER_URL) return;
   const room = roomCode(rawRoom), name = rawName.trim().slice(0, 16) || 'Pilot';
+  if (tutorial.lesson) stopLesson();
   prefs.name = name; savePrefs(prefs);
   net?.close();
   remotes.clear();
@@ -154,6 +170,7 @@ function leaveRoom(): void {
 function info(title: string, detail: string, ttl: number): void { messages.show({ title, detail, kind: 'info', ttl }); }
 
 function crashed(reason: string): void {
+  if (tutorial.active) { messages.show({ title: 'Crashed', detail: `${reason}\nRestarting the run`, kind: 'bad', ttl: 2.5 }); return; }
   messages.show({ title: 'Destroyed', detail: `${reason}\nRespawning in 5 s · ${keyLabel(bindings.key('reset'))} to respawn now`, kind: 'bad', ttl: 0 });
 }
 
@@ -193,6 +210,7 @@ function onCombat(events: CombatEvent[], selfId: number, nameOf: (id: number) =>
 
 const ASSIST_LABEL: Record<keyof AssistFlags, string> = { stability: 'Stability assist', autoHover: 'Auto-hover', envelope: 'Envelope limits', turnCoord: 'Turn coordination' };
 function setAssist(k: keyof AssistFlags, v: boolean): void {
+  if (tutorial.active) { info('Assists are set by the lesson', 'Stop the lesson in Settings → Tutorial to change them', 2); syncButtons(); menu.refresh(); return; }
   prefs.assists[k] = v;
   savePrefs(prefs);
   s.altHold = s.hdgHold = s.attHold = null;
@@ -228,9 +246,45 @@ function onAction(a: Action): void {
 
 function reset(): void {
   if (net) { resetRequested = true; return; }          // the server respawns us; onRespawn follows
+  if (tutorial.lesson) { onTutorial(tutorial.restart()); return; }
   messages.show(session.reset());
   soloCombat.revive(SOLO_ID);
   rig.snap();
+}
+function startLesson(id: string): void {
+  const l = lessons.find(x => x.id === id);
+  if (!l || net) return;
+  onTutorial(tutorial.start(l));
+  menu.close();
+}
+
+function stopLesson(): void { tutorial.stop(); syncButtons(); }
+
+/** Back to free solo flight: your own assists, cold on Base. */
+function leaveTutorial(): void {
+  stopLesson();
+  if (net) return;
+  messages.show(session.reset());
+  soloCombat.revive(SOLO_ID);
+  rig.snap();
+}
+
+/** Moves the aircraft for a lesson run and records finished lessons. */
+function onTutorial(e: TutorialEvent | null): void {
+  if (!e) return;
+  if (e.kind === 'gate') { combatSound.gate(); return; }
+  const L = tutorial.lesson!;
+  if (e.kind === 'place') {
+    const a = e.at;
+    if (a.cold) placeOnGround(s, a.x, a.y, a.z, a.heading);
+    else placeInFlight(s, a.x, a.y, a.z, a.speed, a.heading, params.rotor.omegaNominal);
+    landings.onReset(); soloCombat.revive(SOLO_ID); rig.snap(); messages.clear(); syncButtons();
+    info(L.title, L.runs.length > 1 ? e.run.label : '', 2.5);
+    return;
+  }
+  if (!prefs.lessons.includes(L.id)) { prefs.lessons.push(L.id); savePrefs(prefs); }
+  messages.show({ title: 'Lesson complete', detail: L.title, kind: 'good', ttl: 3 });
+  syncButtons();
 }
 function syncCameraView(): void { $('vignette').hidden = rig.mode !== 'Cockpit'; }
 function toggleSound(): void {
@@ -247,7 +301,8 @@ async function flyFullscreen(): Promise<void> {
 }
 
 function syncButtons(): void {
-  for (const b of document.querySelectorAll<HTMLButtonElement>('[data-assist]')) b.setAttribute('aria-pressed', String(prefs.assists[b.dataset.assist as keyof AssistFlags]));
+  const a = assistsNow();
+  for (const b of document.querySelectorAll<HTMLButtonElement>('[data-assist]')) b.setAttribute('aria-pressed', String(a[b.dataset.assist as keyof AssistFlags]));
 }
 function syncKeyLabels(): void {
   for (const k of document.querySelectorAll<HTMLElement>('kbd[data-key]')) k.textContent = keyLabel(bindings.key(k.dataset.key as Action));
@@ -307,13 +362,15 @@ function frame(now: number): void {
         resetRequested = false;
       } else {
         pose.prevPos.copy(s.pos); pose.prevQ.copy(s.q);
-        for (let k = 0; k < SUBSTEPS; k++) { step(s, input, prefs.assists, world, SIM_DT, simT, params); simT += SIM_DT; }
+        const assists = assistsNow();
+        for (let k = 0; k < SUBSTEPS; k++) { step(s, input, assists, world, SIM_DT, simT, params); simT += SIM_DT; }
         pose.endPos.copy(s.pos); pose.endQ.copy(s.q);
         const events = soloCombat.tick(NET_DT, new Map([[SOLO_ID, weapon]]), {
           padUnder: st => landings.padUnder(st),
-          respawn: () => { session.reset(); rig.snap(); messages.clear(); info('Respawned', 'Raise the collective to start the engine', 2.5); },
+          respawn: () => { if (tutorial.active) { onTutorial(tutorial.restart()); return; } session.reset(); rig.snap(); messages.clear(); info('Respawned', 'Raise the collective to start the engine', 2.5); },
         });
         onCombat(events, SOLO_ID, () => 'You');
+        for (const e of tutorial.tick(NET_DT, s, input)) onTutorial(e);
       }
       weapon.flare = flareRequested = false;
       accum -= NET_DT;
@@ -390,7 +447,9 @@ function frame(now: number): void {
   kit.sun.target.position.copy(viewState.pos);
   effects.update(dt, kit.camera, innerHeight);
 
-  hud.update(now, s, input, prefs.assists, params);
+  hud.update(now, s, input, assistsNow(), params);
+  tutPanel.update(now, tutorial, viewState);
+  gates.update(tutorial, dt, viewState.pos);
   aim.update(now, kit.camera, viewState.pos, viewState.q, { ...cv.self, mode: weaponMode }, lockPos(cv.self.lock.targetId), !menu.open);
   if (now - lastMap > 33) { lastMap = now; drawMap(viewState, remoteViews, cv); }
   if (now - lastPanel > 500) { lastPanel = now; updatePanels(cv); }
@@ -414,6 +473,8 @@ function drawMap(v: HeliState, others: RemoteView[], cv: CombatView): void {
     else if (t.alive) { const e = new Euler().setFromQuaternion(t.q, 'YXZ'); blips.push({ x: t.pos.x, z: t.pos.z, heading: -e.y, kind: 'drone', locked: t.id === lockId }); }
   }
   for (const m of cv.missiles) blips.push({ x: m.pos.x, z: m.pos.z, heading: 0, kind: 'missile' });
+  const goal = tutorial.target();
+  if (goal) blips.push({ x: goal.x, z: goal.z, heading: 0, kind: 'goal' });
   minimap.draw(v.pos.x, v.pos.z, -_eu.y, blips);
 }
 

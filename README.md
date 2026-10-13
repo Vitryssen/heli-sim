@@ -47,6 +47,17 @@ After that, server changes deploy automatically (`.github/workflows/deploy-serve
 
 The old landing time trial and the target-pad beacon are gone; landings are still graded.
 
+## Tutorial
+
+Settings → Tutorial has nine solo lessons, flown through gates and markers in the world, with a step panel under the top-left buttons:
+
+- **Basics:** lift-off and hover; pedal turns and hover-taxi.
+- **Forward flight:** speed, banked turns and stopping without ballooning.
+- **Landing:** Base from the south; the rooftop pad.
+- **Assists:** one lesson each for stability, auto-hover, envelope limits and turn coordination. Each flies the same task twice, first with the assist on and then off, and compares the runs (wobble, height drift with the collective released, max pitch, sideslip).
+
+A lesson sets the assists for each run; the assist keys are locked until you leave. A crash restarts the run, and `R` restarts it on demand. **Leave tutorial** (bottom of the menu, shown while a lesson is loaded) puts you back on Base with your own assists. Finished lessons are remembered in the browser. `src/tutorial/` holds the lessons and the runner (no DOM), covered by `tests/tutorial.test.ts`.
+
 ## Controls (defaults, rebindable under Settings → Controls)
 
 | Control | Keys |

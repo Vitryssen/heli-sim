@@ -2,8 +2,9 @@ import { ACTIONS, keyLabel, type Action, type Bindings } from '../input/bindings
 import type { Keyboard } from '../input/keyboard';
 import type { Prefs } from '../game/prefs';
 import type { AssistFlags } from '../sim/state';
+import type { Lesson } from '../tutorial/lessons';
 
-export type Tab = 'help' | 'controls' | 'assists' | 'mouse' | 'multiplayer';
+export type Tab = 'help' | 'controls' | 'assists' | 'mouse' | 'multiplayer' | 'tutorial';
 
 export interface MultiplayerView {
   configured: boolean;
@@ -23,6 +24,10 @@ export interface MenuHooks {
   onJoin(room: string, name: string): void;
   onLeave(): void;
   defaultName(): string;
+  tutorial(): { lessons: Lesson[]; done: string[]; current: Lesson | null };   // current: loaded, flying or finished
+  onLesson(id: string): void;
+  onLessonRestart(): void;
+  onLeaveTutorial(): void;
 }
 
 const ASSIST_ROWS: { k: keyof AssistFlags; label: string; detail: string }[] = [
@@ -32,7 +37,7 @@ const ASSIST_ROWS: { k: keyof AssistFlags; label: string; detail: string }[] = [
   { k: 'turnCoord', label: 'Turn coordination', detail: 'Yaws the nose into banked turns above about 30 km/h.' },
 ];
 
-/** Settings overlay: help, key rebinding, assists and mouse. Pauses the game while open. */
+/** Settings overlay: help, key rebinding, assists, mouse, multiplayer and the tutorial. Pauses the game while open. */
 export class SettingsMenu {
   open = false;
   private root = document.getElementById('menu')!;
@@ -45,6 +50,7 @@ export class SettingsMenu {
     for (const b of this.root.querySelectorAll<HTMLButtonElement>('[data-tab]')) b.onclick = () => this.show(b.dataset.tab as Tab);
     document.getElementById('menuFly')!.onclick = () => this.hooks.onFly();
     document.getElementById('menuWindow')!.onclick = () => this.close();
+    document.getElementById('menuLeaveTut')!.onclick = () => { this.hooks.onLeaveTutorial(); this.close(); };
     this.root.addEventListener('click', e => { if (e.target === this.root) this.close(); });
     addEventListener('keydown', e => { if (this.open && e.code === 'Escape' && !this.keyboard.capture) this.close(); });
   }
@@ -74,6 +80,7 @@ export class SettingsMenu {
 
   private render(): void {
     const k = (a: Action) => `<kbd>${keyLabel(this.bindings.key(a))}</kbd>`;
+    document.getElementById('menuLeaveTut')!.hidden = !this.hooks.tutorial().current;
     if (this.tab === 'help') {
       this.body.innerHTML = `
         <p>Hold ${k('collectiveUp')} until the skids lift. Hunt the orange targets on the minimap, or other pilots in a multiplayer room.</p>
@@ -85,7 +92,7 @@ export class SettingsMenu {
         </div>
         <p><b>Missiles:</b> hold a target in the dashed circle until LOCK, then fire. Warning tone means flares. Sit still on an <b>H</b> pad for 5 s to rearm.</p>
         <p><b>It carries momentum:</b> the aircraft keeps turning after you let go, and pulling the nose up at speed makes you climb.</p>
-        <p>Fly fullscreen so Ctrl+W can't close the tab. Every key is listed under Controls.</p>`;
+        <p>New to helicopters? The Tutorial tab teaches the basics step by step. Fly fullscreen so Ctrl+W can't close the tab. Every key is listed under Controls.</p>`;
     } else if (this.tab === 'controls') {
       const groups = [...new Set(ACTIONS.map(a => a.group))];
       this.body.innerHTML = groups.map(g => `<h3>${g}</h3><div class="binds">${ACTIONS.filter(a => a.group === g).map(a =>
@@ -100,6 +107,8 @@ export class SettingsMenu {
       for (const r of ASSIST_ROWS) (document.getElementById(`as-${r.k}`) as HTMLInputElement).onchange = e => this.hooks.onAssist(r.k, (e.target as HTMLInputElement).checked);
     } else if (this.tab === 'multiplayer') {
       this.renderMultiplayer();
+    } else if (this.tab === 'tutorial') {
+      this.renderTutorial();
     } else {
       this.body.innerHTML = `
         <label class="range"><span>Sensitivity <output id="sensOut">${Math.round(this.prefs.sensitivity * 100)}%</output></span>
@@ -109,6 +118,21 @@ export class SettingsMenu {
       sens.oninput = () => { document.getElementById('sensOut')!.textContent = Math.round(+sens.value * 100) + '%'; this.hooks.onMouse(+sens.value, inv.checked); };
       inv.onchange = () => this.hooks.onMouse(+sens.value, inv.checked);
     }
+  }
+
+  private renderTutorial(): void {
+    const t = this.hooks.tutorial(), mp = this.hooks.multiplayer();
+    const inRoom = mp.status === 'connecting' || mp.status === 'connected';
+    const groups = [...new Set(t.lessons.map(l => l.group))];
+    this.body.innerHTML = `
+      <p>Short lessons with gates to fly through. Each assist lesson flies the same task twice, first with the assist on and then off, and compares the two runs. ${inRoom ? '<b>Lessons are solo only:</b> leave the room to fly one.' : ''}</p>
+      ${t.current ? `<div class="menu-row"><span class="note">Lesson: ${t.current.title}</span><button class="tg" id="tutRestart">Restart lesson</button></div>` : ''}
+      ${groups.map(g => `<h3>${g}</h3><div class="lessons">${t.lessons.filter(l => l.group === g).map(l => `
+        <button class="tg" data-lesson="${l.id}" aria-pressed="${t.done.includes(l.id)}" ${inRoom ? 'disabled' : ''}><span class="led"></span>${l.title}</button><span>${l.summary}</span>`).join('')}</div>`).join('')}
+      <p class="note">${t.done.length} of ${t.lessons.length} lessons completed</p>`;
+    for (const b of this.body.querySelectorAll<HTMLButtonElement>('[data-lesson]')) b.onclick = () => this.hooks.onLesson(b.dataset.lesson!);
+    const restart = document.getElementById('tutRestart');
+    if (restart) restart.onclick = () => this.hooks.onLessonRestart();
   }
 
   private renderMultiplayer(): void {

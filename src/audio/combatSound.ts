@@ -1,5 +1,6 @@
 /**
- * Combat audio: minigun, missile launch, explosions, lock tones and the missile warning.
+ * Combat audio: minigun, missile launch, explosions, lock tones and the missile warning, plus the
+ * tutorial's gate chime.
  * Synthesized with WebAudio; starts when the player switches sound on (a user gesture).
  */
 export class CombatSound {
@@ -50,6 +51,19 @@ export class CombatSound {
     g.gain.setValueAtTime(0.06, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
     o.connect(g).connect(this.master);
     o.start(t); o.stop(t + 0.06);
+  }
+
+  /** Rising two-note chime for flying through a tutorial gate. */
+  gate(): void {
+    if (!this.ctx || !this.on || !this.master) return;
+    const t = this.ctx.currentTime;
+    [[880, 0], [1320, 0.07]].forEach(([hz, at]) => {
+      const o = this.ctx!.createOscillator(), g = this.ctx!.createGain();
+      o.type = 'sine'; o.frequency.value = hz;
+      g.gain.setValueAtTime(0.0001, t + at); g.gain.exponentialRampToValueAtTime(0.16, t + at + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + at + 0.35);
+      o.connect(g).connect(this.master!);
+      o.start(t + at); o.stop(t + at + 0.4);
+    });
   }
 
   private burst(level: number, seconds: number, fromHz: number, toHz: number): void {

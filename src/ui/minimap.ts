@@ -2,7 +2,7 @@ import type { Layout } from '../world/layout';
 import { terrainH } from '../world/terrain';
 import { clamp, smooth } from '../sim/math';
 
-export type BlipKind = 'player' | 'drone' | 'ground' | 'missile';
+export type BlipKind = 'player' | 'drone' | 'ground' | 'missile' | 'goal';   // goal: the tutorial's next gate or pad
 export interface MapBlip { x: number; z: number; heading: number; kind: BlipKind; name?: string; dead?: boolean; locked?: boolean }
 
 const WORLD = 2400;                 // the base map covers ±2.4 km
@@ -56,7 +56,9 @@ export class Minimap {
       const m = worldToMap(b.x - px, b.z - pz, heading, range, R - 6 * scale);
       const x = W / 2 + m.x, y = W / 2 + m.y;
       g.save(); g.translate(x, y);
-      if (b.kind === 'missile') {
+      if (b.kind === 'goal') {
+        g.strokeStyle = '#ffb547'; g.lineWidth = 2 * scale; g.beginPath(); g.arc(0, 0, 5 * scale, 0, Math.PI * 2); g.stroke();
+      } else if (b.kind === 'missile') {
         g.fillStyle = '#ff6b5e'; g.beginPath(); g.arc(0, 0, 2.5 * scale, 0, Math.PI * 2); g.fill();
       } else if (b.kind === 'ground') {
         g.fillStyle = b.dead ? 'rgba(148,166,179,.5)' : '#ff9a6a'; g.fillRect(-3 * scale, -3 * scale, 6 * scale, 6 * scale);

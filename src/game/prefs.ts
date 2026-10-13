@@ -1,7 +1,7 @@
 import type { AssistFlags } from '../sim/state';
 import { browserStore, type KeyValueStore } from '../input/bindings';
 
-export interface Prefs { assists: AssistFlags; sensitivity: number; invertY: boolean; name: string }
+export interface Prefs { assists: AssistFlags; sensitivity: number; invertY: boolean; name: string; lessons: string[] }   // lessons: ids completed
 
 const KEY = 'heli-sim.prefs.v1';
 export const DEFAULT_PREFS: Prefs = {
@@ -9,16 +9,18 @@ export const DEFAULT_PREFS: Prefs = {
   sensitivity: 1,
   invertY: false,
   name: '',
+  lessons: [],
 };
 
 export function loadPrefs(store: KeyValueStore | null = browserStore()): Prefs {
-  const p: Prefs = { ...DEFAULT_PREFS, assists: { ...DEFAULT_PREFS.assists } };
+  const p: Prefs = { ...DEFAULT_PREFS, assists: { ...DEFAULT_PREFS.assists }, lessons: [] };
   try {
     const saved = JSON.parse(store?.getItem(KEY) ?? 'null') as Partial<Prefs> | null;
     if (saved?.assists) Object.assign(p.assists, saved.assists);
     if (typeof saved?.sensitivity === 'number') p.sensitivity = saved.sensitivity;
     if (typeof saved?.invertY === 'boolean') p.invertY = saved.invertY;
     if (typeof saved?.name === 'string') p.name = saved.name;
+    if (Array.isArray(saved?.lessons)) p.lessons = saved.lessons.filter(x => typeof x === 'string');
   } catch { /* defaults */ }
   return p;
 }
