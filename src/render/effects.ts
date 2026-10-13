@@ -91,6 +91,7 @@ export class Effects {
   private sparks: Particles;
   private dust: Particles;
   private glow: Particles;
+  private trail: Particles;
   private tracers: Tracer[] = [];
   private tracerGeo = new THREE.BufferGeometry();
   private tracerPos = new Float32Array(MAX_TRACERS * 6);
@@ -116,6 +117,7 @@ export class Effects {
     this.sparks = new Particles(scene, sprite, { color: 0xffd27a, max: 500, additive: true, drag: 0.5, gravity: 9.81 });
     this.dust = new Particles(scene, sprite, { color: 0xbfae88, max: 400, drag: 0.4, gravity: 2, grow: 3 });
     this.glow = new Particles(scene, sprite, { color: 0xfff1c4, max: 300, additive: true, drag: 0.2, grow: 0.6 });
+    this.trail = new Particles(scene, sprite, { color: 0xd4d4ce, max: 1800, drag: 0.8, gravity: -0.3, grow: 5 });   // missile plumes, kept apart so wrecks can't eat them
     this.tracerPos.fill(-1e5);
     this.tracerGeo.setAttribute('position', new THREE.BufferAttribute(this.tracerPos, 3));
     const lines = new THREE.LineSegments(this.tracerGeo, new THREE.LineBasicMaterial({ color: 0xffc46b, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
@@ -177,6 +179,18 @@ export class Effects {
   }
 
   /** Bring missile models in line with the simulation (or snapshots) and lay smoke behind them. */
+  /** A missile leaving its pod: a flash, a short fireball and a puff of backblast. */
+  private launchFlash(pos: THREE.Vector3, vel: THREE.Vector3): void {
+    const back = this._d.copy(vel).normalize().negate();
+    this.glow.emit(pos.x, pos.y, pos.z, 0, 0, 0, 0.12, 6, 1);
+    for (let i = 0; i < 10; i++) {
+      this.fire.emit(pos.x, pos.y, pos.z, back.x * 12 + (Math.random() - 0.5) * 6, back.y * 12 + (Math.random() - 0.5) * 6, back.z * 12 + (Math.random() - 0.5) * 6, 0.18 + Math.random() * 0.15, 1.4, 1);
+    }
+    for (let i = 0; i < 16; i++) {
+      this.trail.emit(pos.x, pos.y, pos.z, back.x * 9 + (Math.random() - 0.5) * 5, back.y * 9 + (Math.random() - 0.5) * 3, back.z * 9 + (Math.random() - 0.5) * 5, 2.5 + Math.random() * 1.5, 1.6, 0.6);
+    }
+  }
+
   syncMissiles(list: { id: number; pos: THREE.Vector3; vel: THREE.Vector3 }[], dt: number): void {
     const seen = new Set<number>();
     for (const m of list) {
@@ -188,15 +202,20 @@ export class Effects {
         for (let k = 0; k < 4; k++) { const f = new THREE.Mesh(this.finGeo, this.missileMat); f.position.z = 0.65; f.rotation.z = (k * Math.PI) / 2; g.add(f); }
         this.scene.add(g);
         this.missiles.set(m.id, g);
+        this.launchFlash(m.pos, m.vel);
       }
       g.position.copy(m.pos);
       if (m.vel.lengthSq() > 1) g.quaternion.setFromUnitVectors(this.Z, this._d.copy(m.vel).normalize().negate());
       const tail = this._v.copy(m.vel).normalize().multiplyScalar(-0.9).add(m.pos);
-      this.glow.emit(tail.x, tail.y, tail.z, 0, 0, 0, 0.05, 1.6, 1);
-      const puffs = Math.max(1, Math.round(dt * 90));
+      // motor: a flickering flame and glow at the tail
+      this.glow.emit(tail.x, tail.y, tail.z, 0, 0, 0, 0.05, 2.2 + Math.random() * 0.8, 1);
+      this.fire.emit(tail.x, tail.y, tail.z, -m.vel.x * 0.05, -m.vel.y * 0.05, -m.vel.z * 0.05, 0.06, 0.9 + Math.random() * 0.5, 1);
+      // plume: a puff every ~1.2 m along the path, spreading and lingering
+      const puffs = Math.max(1, Math.round((m.vel.length() * dt) / 1.2));
       for (let i = 0; i < puffs; i++) {
         const f = i / puffs;
-        this.smoke.emit(tail.x - m.vel.x * dt * f, tail.y - m.vel.y * dt * f, tail.z - m.vel.z * dt * f, (Math.random() - 0.5) * 1.5, 0.5, (Math.random() - 0.5) * 1.5, 2.5, 0.9, 0.6);
+        this.trail.emit(tail.x - m.vel.x * dt * f, tail.y - m.vel.y * dt * f, tail.z - m.vel.z * dt * f,
+          (Math.random() - 0.5) * 1.2, 0.3 + Math.random() * 0.4, (Math.random() - 0.5) * 1.2, 4.5 + Math.random(), 1, 0.5);
       }
     }
     for (const [id, g] of this.missiles) if (!seen.has(id)) { this.scene.remove(g); this.missiles.delete(id); }
@@ -236,6 +255,6 @@ export class Effects {
     this.tracerGeo.attributes.position.needsUpdate = true;
 
     const scale = viewportHeight / (2 * Math.tan((camera.fov * Math.PI) / 360));
-    for (const ps of [this.smoke, this.darkSmoke, this.fire, this.sparks, this.dust, this.glow]) ps.update(dt, scale);
+    for (const ps of [this.smoke, this.darkSmoke, this.fire, this.sparks, this.dust, this.glow, this.trail]) ps.update(dt, scale);
   }
 }
