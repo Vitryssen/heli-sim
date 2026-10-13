@@ -190,6 +190,19 @@ describe('missiles and flares', () => {
     expect(decoys / trials).toBeLessThan(0.95);
   });
 
+  test('a training missile homes and sets off the warning, but does no damage', () => {
+    const { combat, ctx } = setup();
+    const b = combat.add(2, 'B', aircraft(0, 300, 0));
+    combat.trainingMissile(2, new Vector3(-250, 340, -500));
+    expect(combat.warning(2)).toBe('missile');
+    const events: CombatEvent[] = [];
+    let t = 0;
+    while (combat.missiles.length && t < 10) { events.push(...run(combat, ctx, NET_DT, {})); t += NET_DT; }
+    expect(events.some(e => e.kind === 'explosion')).toBe(true);        // it got there…
+    expect(events.some(e => e.kind === 'hit')).toBe(false);             // …harmlessly
+    expect(b.state.hull).toBe(100);
+  });
+
   test('a salvo leaves one flare at a time, alternating left and right', () => {
     const { combat, ctx } = setup();
     const a = combat.add(1, 'A', aircraft(0, 300, 0));
@@ -238,6 +251,18 @@ describe('practice targets and rearming', () => {
     expect(a.targetKills).toBe(1);
     run(combat, ctx, P.targets.respawn + 0.1, {});
     expect(drone.alive).toBe(true);
+  });
+
+  test('resetting practice brings every target back and clears the air', () => {
+    const { combat, ctx } = setup({ targets: true });
+    combat.add(1, 'A', aircraft(0, 300, 0));
+    for (const t of combat.targets.slice(0, 3)) { t.alive = false; t.hp = 0; t.respawnIn = 15; }
+    combat.trainingMissile(1, new Vector3(0, 300, -600));
+    combat.resetPractice();
+    expect(combat.targets.every(t => t.alive && t.hp === (t.kind === 'drone' ? P.targets.droneHp : P.targets.groundHp))).toBe(true);
+    expect(combat.missiles).toHaveLength(0);
+    run(combat, ctx, 0.5, {});
+    expect(combat.targets.every(t => t.alive)).toBe(true);
   });
 
   test('sitting 5 s on a pad refills weapons and repairs the hull', () => {

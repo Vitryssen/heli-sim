@@ -4,7 +4,7 @@ import type { Pad } from '../world/layout';
 import { terrainH } from '../world/terrain';
 import { SKID_DROP } from '../sim/geometry';
 import { DEG } from '../sim/math';
-import type { Lesson, Probe, Run, Start, Step } from './lessons';
+import { NO_COMBAT, type CombatProbe, type Lesson, type Probe, type Run, type Start, type Step } from './lessons';
 
 /** Where to put the aircraft: cold on a surface at height `y`, or flying with its skids `y` above sea level… see `placement`. */
 export interface Placement { cold: boolean; x: number; y: number; z: number; heading: number; speed: number }   // heading rad, speed m/s
@@ -14,6 +14,7 @@ export interface RunResult { label: string; time: number; wobble: number; drift:
 export type TutorialEvent =
   | { kind: 'place'; at: Placement; run: Run; first: boolean }
   | { kind: 'gate' }
+  | { kind: 'incoming' }                                                     // fire a training missile at the player
   | { kind: 'complete'; lesson: Lesson };
 
 export type Phase = 'flying' | 'crashed' | 'between' | 'done';
@@ -61,6 +62,9 @@ export class Tutorial {
   private acc = emptyAcc();
   private prev = new Vector3();
   private hasPrev = false;
+  private entered = false;                  // the current step has taken its `since` snapshot
+  private since: CombatProbe = NO_COMBAT;
+  private lastThreat: CombatProbe['threat'] = 'none';
 
   constructor(private padUnder: (s: HeliState) => Pad | null) {}
 
@@ -84,13 +88,13 @@ export class Tutorial {
   private begin(run: number): TutorialEvent {
     const L = this.lesson!;
     this.run = run; this.step = 0; this.hold = 0; this.phase = 'flying'; this.countdown = 0;
-    this.acc = emptyAcc(); this.hasPrev = false;
+    this.acc = emptyAcc(); this.hasPrev = false; this.entered = false;
     if (this.results.length > run) this.results.length = run;   // a restarted run replaces its old result
     return { kind: 'place', at: placement(L.start), run: L.runs[run], first: run === 0 };
   }
 
   /** One fixed tick (after the flight model has stepped). */
-  tick(dt: number, s: HeliState, input: PilotInput): TutorialEvent[] {
+  tick(dt: number, s: HeliState, input: PilotInput, combat: CombatProbe = NO_COMBAT): TutorialEvent[] {
     const L = this.lesson;
     if (!L || this.phase === 'done') return [];
     if (this.phase === 'crashed' || this.phase === 'between') {
@@ -99,16 +103,21 @@ export class Tutorial {
     }
     if (s.crashed) { this.phase = 'crashed'; this.countdown = CRASH_PAUSE; return []; }
 
-    const hspeed = Math.hypot(s.vel.x, s.vel.z);
-    const probe: Probe = { s, heading: headingOf(s), hspeed };
-    this.measure(dt, s, hspeed);
-
     const out: TutorialEvent[] = [];
     const step = L.steps[this.step];
+    const incoming = step.kind === 'do' && step.incoming;
+    if (!this.entered) { this.entered = true; this.since = { ...combat }; if (incoming) out.push({ kind: 'incoming' }); }
+    else if (incoming && combat.threat === 'hit' && this.lastThreat !== 'hit') out.push({ kind: 'incoming' });   // it got through: another one
+    this.lastThreat = combat.threat;
+
+    const hspeed = Math.hypot(s.vel.x, s.vel.z);
+    const probe: Probe = { s, heading: headingOf(s), hspeed, combat, since: this.since };
+    this.measure(dt, s, hspeed);
+
     if (this.passes(step, probe, input, dt)) {
       if (step.kind === 'land') this.acc.touchdown = -s.impact;
       if (step.kind === 'gate') out.push({ kind: 'gate' });
-      this.step++; this.hold = 0;
+      this.step++; this.hold = 0; this.entered = false;
       if (this.step >= L.steps.length) out.push(...this.finishRun());
     }
     this.prev.copy(s.pos); this.hasPrev = true;

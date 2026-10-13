@@ -1,6 +1,7 @@
 import { Vector3 } from 'three';
 import type { AssistFlags, HeliState } from '../sim/state';
-import type { Pad } from '../world/layout';
+import type { Layout, Pad } from '../world/layout';
+import { createTargets } from '../combat/targets';
 import { terrainH } from '../world/terrain';
 
 /** What a lesson reports at the end of each run. */
@@ -9,11 +10,15 @@ export type Metric = 'time' | 'wobble' | 'drift' | 'collective' | 'maxPitch' | '
 /** Where a run starts. Without `agl` the aircraft sits cold on the ground (or on `top`). */
 export interface Start { x: number; z: number; heading: number; agl?: number; speed?: number; top?: number }   // heading °, speed km/h
 
-/** Flight data a step's condition can look at. */
-export interface Probe { s: HeliState; heading: number; hspeed: number }   // heading 0..360°, horizontal speed m/s
+/** Solo combat as the HUD shows it, for the weapons lesson. `threat` is the training missile's fate. */
+export interface CombatProbe { mode: 'gun' | 'missile'; lock: 'none' | 'search' | 'locked'; targetKills: number; threat: 'none' | 'inbound' | 'decoyed' | 'hit' }
+export const NO_COMBAT: CombatProbe = { mode: 'gun', lock: 'none', targetKills: 0, threat: 'none' };
+
+/** Flight data a step's condition can look at; `since` is the combat state when the step began. */
+export interface Probe { s: HeliState; heading: number; hspeed: number; combat: CombatProbe; since: CombatProbe }   // heading 0..360°, horizontal speed m/s
 
 export type Step =
-  | { kind: 'do'; text: string; done: (p: Probe) => boolean; hold?: number; measure?: boolean; handsOff?: boolean }   // handsOff: only counts with the collective centred
+  | { kind: 'do'; text: string; done: (p: Probe) => boolean; hold?: number; measure?: boolean; handsOff?: boolean; incoming?: boolean }   // handsOff: only counts with the collective centred; incoming: a training missile is fired at you when the step starts (and again if one gets through)
   | { kind: 'gate'; text: string; pos: Vector3; normal: Vector3; r: number }
   | { kind: 'zone'; text: string; pos: Vector3; r: number; hold: number; maxSpeed: number }
   | { kind: 'land'; text: string; pad: Pad };
@@ -23,7 +28,7 @@ export interface Run { label: string; assists: AssistFlags; intro: string }
 
 export interface Lesson {
   id: string;
-  group: 'Basics' | 'Forward flight' | 'Landing' | 'Assists';
+  group: 'Basics' | 'Forward flight' | 'Landing' | 'Assists' | 'Combat';
   title: string;
   summary: string;
   start: Start;
@@ -69,8 +74,9 @@ function course(x0: number, z0: number) {
  * The tutorial. Step text can name keys as {action}; the panel swaps in the player's bindings.
  * Courses use the fixed map, so tests can check every gate and start point is clear.
  */
-export function buildLessons(pads: Pad[]): Lesson[] {
-  const [base, roof] = pads;
+export function buildLessons(layout: Layout): Lesson[] {
+  const [base, roof] = layout.pads;
+  const trucks = createTargets(layout).filter(t => t.kind === 'ground');
   const near = (p: Probe, x: number, z: number, r: number) => Math.hypot(p.s.pos.x - x, p.s.pos.z - z) < r;
   const lessons: Lesson[] = [];
 
@@ -227,6 +233,24 @@ export function buildLessons(pads: Pad[]): Lesson[] {
         c.gate('And left through the last gate.', -50, -10, { agl: 30 }, 10),
       ],
       metrics: ['time', 'slip'],
+    });
+  }
+  {
+    const truck = trucks[0];                                     // west of the town, open ground to the south
+    lessons.push({
+      id: 'weapons', group: 'Combat', title: 'Guns, missiles and flares',
+      summary: 'Shoot a truck with the miniguns, lock and fire a missile, and decoy an incoming one with flares.',
+      start: { x: truck.pos.x, z: truck.pos.z + 350, heading: 0, agl: 30, speed: 0 },
+      runs: allOn('Practice targets are orange on the minimap: trucks on the ground and drones in the air. Click the view first so the mouse buttons fire.'),
+      steps: [
+        { kind: 'do', text: 'Put the small amber ring on the truck ahead and hold {fire} to fire the miniguns. Destroy it.', done: p => p.combat.targetKills > p.since.targetKills },
+        { kind: 'do', text: 'Press {weaponToggle} to switch to missiles.', done: p => p.combat.mode === 'missile' },
+        { kind: 'do', text: 'Turn toward another truck and hold it inside the dashed circle until the box turns red and says LOCK.', done: p => p.combat.mode === 'missile' && p.combat.lock === 'locked' },
+        { kind: 'do', text: 'Fire with {fire} and watch the missile find its target.', done: p => p.combat.targetKills > p.since.targetKills },
+        { kind: 'do', text: 'Missile warning! A training missile is coming for you. Drop flares with {flares} to decoy it.', incoming: true, done: p => p.combat.threat === 'decoyed' },
+        { kind: 'do', text: 'Switch back to the guns with {weaponToggle}.', done: p => p.combat.mode === 'gun' },
+      ],
+      metrics: ['time'],
     });
   }
   return lessons;

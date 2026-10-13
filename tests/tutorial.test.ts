@@ -11,7 +11,7 @@ import { Landings } from '../src/game/landings';
 import { clamp } from '../src/sim/math';
 import { fresh, layout, NEUTRAL, world } from './harness';
 
-const lessons = buildLessons(layout.pads);
+const lessons = buildLessons(layout);
 const lesson = (id: string) => lessons.find(l => l.id === id)!;
 const landings = new Landings(layout.pads);
 
@@ -144,6 +144,28 @@ describe('flying lessons', () => {
     expect(tut.run).toBe(0);
     expect(s.crashed).toBe(false);
     expect(Math.hypot(s.pos.x - l.start.x, s.pos.z - l.start.z)).toBeLessThan(1);
+  });
+});
+
+describe('weapons lesson', () => {
+  test('steps follow the combat state; a missile that gets through is sent again', () => {
+    const l = lesson('weapons'), tut = new Tutorial(() => null), s = fresh();
+    place(s, tut.start(l));
+    const c = { mode: 'gun' as const, lock: 'none' as const, targetKills: 0, threat: 'none' as const };
+    const tick = (combat: object) => tut.tick(NET_DT, s, NEUTRAL, { ...c, ...combat });
+    tick({});                                                    // step 1 begins
+    tick({ targetKills: 1 }); expect(tut.step).toBe(1);          // truck down with the guns
+    tick({ targetKills: 1, mode: 'missile' }); expect(tut.step).toBe(2);
+    tick({ targetKills: 1, mode: 'missile', lock: 'search' }); expect(tut.step).toBe(2);
+    tick({ targetKills: 1, mode: 'missile', lock: 'locked' }); expect(tut.step).toBe(3);
+    tick({ targetKills: 1, mode: 'missile' }); expect(tut.step).toBe(3);        // a kill from before this step doesn't count
+    tick({ targetKills: 2, mode: 'missile' }); expect(tut.step).toBe(4);
+    expect(tick({ targetKills: 2, mode: 'missile' })).toEqual([{ kind: 'incoming' }]);          // flare step: here it comes
+    expect(tick({ targetKills: 2, mode: 'missile', threat: 'inbound' })).toEqual([]);
+    expect(tick({ targetKills: 2, mode: 'missile', threat: 'hit' })).toEqual([{ kind: 'incoming' }]);   // got through: again
+    tick({ targetKills: 2, mode: 'missile', threat: 'inbound' });
+    tick({ targetKills: 2, mode: 'missile', threat: 'decoyed' }); expect(tut.step).toBe(5);
+    expect(tick({ targetKills: 2, mode: 'gun', threat: 'decoyed' })).toMatchObject([{ kind: 'complete' }]);
   });
 });
 

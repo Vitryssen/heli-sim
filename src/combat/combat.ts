@@ -24,7 +24,7 @@ export interface Member {
   killedBy: { id: number; weapon: Weapon } | null;
 }
 
-export interface Missile { id: number; owner: number; targetId: number | null; flareId: number | null; pos: Vector3; vel: Vector3; age: number }
+export interface Missile { id: number; owner: number; targetId: number | null; flareId: number | null; pos: Vector3; vel: Vector3; age: number; dud?: boolean }   // dud: a training missile, harmless
 export interface Flare { id: number; owner: number; pos: Vector3; vel: Vector3; age: number }
 
 export type CombatEvent =
@@ -89,6 +89,27 @@ export class Combat {
   }
 
   /** Whether someone is locking, or a missile is tracking, aircraft `id`. */
+  private reviveTarget(t: PracticeTarget): void { t.alive = true; t.respawnIn = 0; t.hp = t.kind === 'drone' ? P.targets.droneHp : P.targets.groundHp; }
+
+  /** Every practice target back at full health, and nothing left in the air (a lesson restarting). */
+  resetPractice(): void {
+    for (const t of this.targets) this.reviveTarget(t);
+    this.missiles.length = 0;
+    this.flares.length = 0;
+  }
+
+  /**
+   * A harmless missile fired at aircraft `targetId` from `from` (the tutorial's flare practice). It
+   * homes, sets off the warning and can be decoyed like any other, but does no damage. Returns its id.
+   */
+  trainingMissile(targetId: number, from: Vector3): number {
+    const m = this.members.get(targetId);
+    const vel = (m ? m.state.pos.clone().sub(from) : new Vector3(0, 0, -1)).setLength(P.missile.speed);
+    const ms: Missile = { id: this.nextId++, owner: -1, targetId, flareId: null, pos: from.clone(), vel, age: 0, dud: true };
+    this.missiles.push(ms);
+    return ms.id;
+  }
+
   warning(id: number): 'none' | 'locked' | 'missile' {
     if (this.missiles.some(ms => ms.targetId === id && ms.flareId === null)) return 'missile';
     for (const m of this.members.values()) if (m.id !== id && m.loadout.mode === 'missile' && m.loadout.lock.targetId === id) return 'locked';
@@ -107,7 +128,7 @@ export class Combat {
     this.hits.clear();
     this.time += dt;
     for (const t of this.targets) {
-      if (!t.alive && (t.respawnIn -= dt) <= 0) { t.alive = true; t.hp = t.kind === 'drone' ? P.targets.droneHp : P.targets.groundHp; }
+      if (!t.alive && (t.respawnIn -= dt) <= 0) this.reviveTarget(t);
       if (t.kind === 'drone') placeDrone(t, this.time);
     }
     for (const m of this.members.values()) this.member(m, inputs.get(m.id) ?? NO_WEAPON, dt, ctx);
@@ -268,7 +289,8 @@ export class Combat {
 
   private detonate(ms: Missile, direct: Member | PracticeTarget | null): void {
     const mp = P.missile;
-    this.events.push({ kind: 'explosion', x: ms.pos.x, y: ms.pos.y, z: ms.pos.z, size: 7 });
+    this.events.push({ kind: 'explosion', x: ms.pos.x, y: ms.pos.y, z: ms.pos.z, size: ms.dud ? 3 : 7 });
+    if (ms.dud) return;
     const apply = (e: Member | PracticeTarget, dmg: number) => {
       if (dmg <= 0) return;
       this.events.push({ kind: 'hit', shooter: ms.owner, victim: e.id, damage: dmg, x: ms.pos.x, y: ms.pos.y, z: ms.pos.z, weapon: 'missile' });
