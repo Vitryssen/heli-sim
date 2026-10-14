@@ -63,7 +63,7 @@ export function startServer(opts: ServerOptions = {}): Promise<RunningServer> {
           send({ type: 'reject', reason: 'Your game version differs from the server. Reload the page to update.' });
           return;
         }
-        room = rooms.get(msg.room) ?? new Room(msg.room, world, layout);
+        room = rooms.get(msg.room) ?? new Room(msg.room, world, layout, msg.sky);
         rooms.set(msg.room, room);
         player = room.join(msg.name, { send });
         if (!player) { send({ type: 'reject', reason: `Room "${msg.room}" is full.` }); if (room.empty) rooms.delete(msg.room); return; }

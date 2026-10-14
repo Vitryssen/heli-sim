@@ -1,6 +1,6 @@
 import { Vector3 } from 'three';
 import type { HeliState } from '../sim/state';
-import type { Pad } from '../world/layout';
+import { padSurface, type Pad } from '../world/layout';
 import { SKIDS } from '../sim/geometry';
 
 export interface Notice { title: string; detail: string; kind: 'good' | 'info' | 'bad'; ttl: number }
@@ -21,7 +21,7 @@ export class Landings {
   padUnder(s: HeliState): Pad | null {
     return this.pads.find(p => SKIDS.every(sk => {
       _p.copy(sk).applyQuaternion(s.q).add(s.pos);
-      return Math.hypot(_p.x - p.x, _p.z - p.z) <= p.r && Math.abs(_p.y - p.top) <= 0.4;
+      return Math.hypot(_p.x - p.x, _p.z - p.z) <= p.r && Math.abs(_p.y - padSurface(p, _p.x, _p.z)) <= 0.4;
     })) ?? null;
   }
 

@@ -4,7 +4,7 @@ import { buildLessons, headingError, type Lesson } from '../src/tutorial/lessons
 import { crossedGate, Tutorial, type TutorialEvent } from '../src/tutorial/tutorial';
 import { placeInFlight, placeOnGround, type AssistFlags, type HeliState, type PilotInput } from '../src/sim/state';
 import { SIM_DT, step } from '../src/sim/step';
-import { crashCheck, MAP_LIMIT } from '../src/sim/collisions';
+import { crashCheck, EDGE_WARN } from '../src/sim/collisions';
 import { params } from '../src/sim/params';
 import { NET_DT, SUBSTEPS } from '../src/net/protocol';
 import { Landings } from '../src/game/landings';
@@ -47,7 +47,7 @@ describe('lesson courses', () => {
   });
 
   test('every gate ring, marker and start point is clear of terrain, buildings and trees', () => {
-    const solid = (p: Vector3) => { world.focus(p.x, p.z); return world.solidAt(p.x, p.y, p.z); };
+    const solid = (p: Vector3) => world.solidAt(p.x, p.y, p.z);
     for (const l of lessons) {
       const tut = new Tutorial(() => null);
       const at = (tut.start(l) as Extract<TutorialEvent, { kind: 'place' }>).at;
@@ -66,7 +66,7 @@ describe('lesson courses', () => {
           expect(st.pos.y - st.r - world.groundAt(st.pos.x, st.pos.z, st.pos.y), `${l.id} gate clearance`).toBeGreaterThan(-0.01);
         }
         const p = st.kind === 'land' ? st.pad : 'pos' in st ? st.pos : null;
-        if (p) expect(Math.max(Math.abs(p.x), Math.abs(p.z))).toBeLessThan(MAP_LIMIT - 600);
+        if (p) expect(Math.max(Math.abs(p.x), Math.abs(p.z))).toBeLessThan(EDGE_WARN - 300);
       }
     }
   });

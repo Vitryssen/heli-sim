@@ -3,8 +3,9 @@ import { params as defaultParams, type Params } from '../sim/params';
 import { SIM_DT } from '../sim/step';
 import type { WeaponInput } from '../combat/loadout';
 import type { CombatEvent, Member } from '../combat/combat';
+import { skyId, type SkyId } from '../world/sky';
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 /** Net tick: inputs are sent and applied once per tick, each tick runs SUBSTEPS fixed sim steps. */
 export const NET_DT = 1 / 60;
 export const SUBSTEPS = Math.round(NET_DT / SIM_DT);
@@ -22,7 +23,8 @@ export interface InputMsg {
   /** Server tick the client was showing other aircraft at when this input was made (lag compensation). */
   viewTick: number;
 }
-export interface JoinMsg { type: 'join'; name: string; room: string; version: number; paramsHash: string }
+/** `sky` is the creator's choice; a room keeps the sky it was created with. */
+export interface JoinMsg { type: 'join'; name: string; room: string; version: number; paramsHash: string; sky: SkyId }
 export type ClientMsg = JoinMsg | InputMsg | { type: 'ping'; t: number };
 
 /** `c` is a packed combat state, see packCombat. */
@@ -42,7 +44,7 @@ export interface SnapshotMsg {
   targets: number[];
 }
 export type ServerMsg =
-  | { type: 'welcome'; id: number; tick: number; room: string }
+  | { type: 'welcome'; id: number; tick: number; room: string; sky: SkyId }
   | { type: 'reject'; reason: string }
   | SnapshotMsg
   | { type: 'event'; kind: 'join' | 'leave' | 'crash'; id: number; name: string; detail?: string }
@@ -96,6 +98,7 @@ export function decodeClient(raw: unknown): ClientMsg | null {
       room: roomCode(String(m.room ?? '')),
       version: num(m.version, 0, 1e6),
       paramsHash: String(m.paramsHash ?? ''),
+      sky: skyId(m.sky),
     };
   }
   if (m.type === 'input') {

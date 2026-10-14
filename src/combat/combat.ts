@@ -5,7 +5,7 @@ import type { Layout, Pad } from '../world/layout';
 import { rng } from '../sim/math';
 import { combatParams as P } from './params';
 import { createLoadout, NO_WEAPON, refill, type Loadout, type WeaponInput } from './loadout';
-import { createTargets, placeDrone, type PracticeTarget } from './targets';
+import { createTargets, placeTarget, type PracticeTarget } from './targets';
 import { rayAirframe, raySphere, segmentPointDistance } from './geometry';
 import { clearLock, updateLock, type LockCandidate } from './lock';
 
@@ -130,7 +130,7 @@ export class Combat {
     this.time += dt;
     for (const t of this.targets) {
       if (!t.alive && (t.respawnIn -= dt) <= 0) this.reviveTarget(t);
-      if (t.kind === 'drone') placeDrone(t, this.time);
+      placeTarget(t, this.time);
     }
     for (const m of this.members.values()) this.member(m, inputs.get(m.id) ?? NO_WEAPON, dt, ctx);
     this.flyMissiles(dt);

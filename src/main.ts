@@ -1,5 +1,5 @@
 import { Euler, Quaternion, Vector3 } from 'three';
-import { createScene, SUN_DIR } from './render/scene';
+import { applyQuality, applySky, createScene, fogFar } from './render/scene';
 import { buildHeliModel, poseControls } from './render/heliModel';
 import { Dust } from './render/dust';
 import { CameraRig } from './render/camera';
@@ -40,6 +40,7 @@ import { RotorSound } from './audio/rotorSound';
 import { CombatSound } from './audio/combatSound';
 import { NetSession, type NetEvent, type NetStatus, type RemoteView } from './net/client';
 import { NET_DT, roomCode, SUBSTEPS } from './net/protocol';
+import { skyId, type SkyId } from './world/sky';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -47,7 +48,7 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const layout = createLayout();
 const world = createWorld(layout);
 const kit = createScene($('view'));
-buildWorldMeshes(kit.scene, kit.renderer, layout);
+const worldView = buildWorldMeshes(kit.scene, kit.renderer, layout);
 const heli = buildHeliModel(kit.scene);
 const cockpit = new Cockpit(kit.renderer);
 heli.root.add(cockpit.group);
@@ -66,6 +67,12 @@ const s = createState();
 const landings = new Landings(layout.pads);
 const session = new Session(s, world, landings);
 const prefs = loadPrefs();
+let roomSky: SkyId | null = null;      // a room's time of day overrides your own while you're in it
+function applyLook(): void {
+  applySky(kit, roomSky ?? prefs.sky);
+  applyQuality(kit, prefs.graphics === 'high');
+  worldView.setQuality(prefs.graphics === 'high');
+}
 const bindings = new Bindings();
 const messages = new Messages($('msg'), $('m1'), $('m2'));
 const hud = new Hud();
@@ -123,7 +130,7 @@ const menu: SettingsMenu = new SettingsMenu(bindings, keyboard, prefs, {
   onFly: () => void flyFullscreen(),
   onClose: () => syncKeyLabels(),
   multiplayer: () => ({ configured: !!SERVER_URL, ...netStatus, players: net?.roster ?? [], ping: net?.ping ?? 0 }),
-  onJoin: (room, name) => joinRoom(room, name),
+  onJoin: (room, name, sky) => joinRoom(room, name, sky),
   onLeave: () => leaveRoom(),
   defaultName: () => prefs.name,
   tutorial: () => ({ lessons, done: prefs.lessons, current: tutorial.lesson }),
@@ -133,9 +140,12 @@ const menu: SettingsMenu = new SettingsMenu(bindings, keyboard, prefs, {
   soundOn: () => sound.on,
   onSoundToggle: () => toggleSound(),
   onVolume: () => { applyVolumes(); savePrefs(prefs); },
+  graphics: () => ({ high: prefs.graphics === 'high', sky: prefs.sky, roomSky }),
+  onQuality: high => { prefs.graphics = high ? 'high' : 'low'; savePrefs(prefs); applyLook(); },
+  onSky: sky => { prefs.sky = sky; savePrefs(prefs); applyLook(); },
 });
 
-function joinRoom(rawRoom: string, rawName: string): void {
+function joinRoom(rawRoom: string, rawName: string, sky: SkyId): void {
   if (!SERVER_URL) return;
   const room = roomCode(rawRoom), name = rawName.trim().slice(0, 16) || 'Pilot';
   if (tutorial.lesson) stopLesson();
@@ -160,7 +170,8 @@ function joinRoom(rawRoom: string, rawName: string): void {
     onCombat: events => onCombat(events, net?.id ?? -1, id => net?.roster.find(p => p.id === id)?.name ?? '?'),
     onRespawn: () => { landings.onReset(); rig.snap(); messages.clear(); info('Respawned', 'Raise the collective to start the engine', 2.5); },
     onCrash: reason => crashed(reason),
-  });
+    onSky: s2 => { roomSky = s2; applyLook(); history.replaceState(null, '', `?room=${encodeURIComponent(room)}&sky=${s2}`); menu.refresh(); },
+  }, sky);
   history.replaceState(null, '', `?room=${encodeURIComponent(room)}`);
   tuning?.lock();
   menu.refresh();
@@ -170,6 +181,8 @@ function joinRoom(rawRoom: string, rawName: string): void {
 function dropToSolo(): void {
   net?.close();
   net = null;
+  roomSky = null;
+  applyLook();
   remotes.clear();
   session.reset();
   soloCombat.revive(SOLO_ID);
@@ -413,7 +426,7 @@ function frame(now: number): void {
     if (!wasOn && s.engineOn) info('Engine start', 'Keep holding until the skids lift', 2.5);
     const n = session.update(dt, !net);
     if (n && n.title === 'Crashed') crashed(n.detail.split('\n')[0]);
-    else if (n && !(n.title === 'Leaving the area' && messages.busy)) messages.show(n);
+    else if (n && (n.title !== 'Turn back' || !messages.busy || messages.showing === 'Turn back')) messages.show(n);
     else if (!net && !wasCrashed && s.crashed && s.hit) crashed(s.hit);
     setLeaveGuard(s.engineOn && !s.crashed);
   } else accum = 0;
@@ -470,9 +483,10 @@ function frame(now: number): void {
 
   // rotor wash
   _hub.copy(HUB).applyQuaternion(viewState.q).add(viewState.pos);
-  const gy = world.groundAt(_hub.x, _hub.z, _hub.y);
+  const land = world.groundAt(_hub.x, _hub.z, _hub.y), wl = world.water(_hub.x, _hub.z);
+  const gy = wl !== null ? Math.max(land, wl) : land;
   const loadG = s.thrust / (params.mass * params.g);
-  dust.update(dt, _hub.x, _hub.z, gy, Math.min(1, rpm) * smooth(0.5, 1.0, loadG) * (1 - smooth(4, 15, _hub.y - gy)));
+  dust.update(dt, _hub.x, _hub.z, gy, Math.min(1, rpm) * smooth(0.5, 1.0, loadG) * (1 - smooth(4, 15, _hub.y - gy)), wl !== null && wl >= land);
 
   const lk = cv.self.lock;
   const stores = { mode: weaponMode, ammo: cv.self.ammo, missiles: cv.self.missiles, flares: cv.self.flares, lock: lk.locked ? 'locked' as const : lk.targetId !== null ? 'search' as const : 'none' as const, warning: cv.self.warning };
@@ -480,13 +494,14 @@ function frame(now: number): void {
   poseControls(heli, input);
   rig.update(dt, viewState, world, mouse.look, rpm);
   kit.sky.position.copy(kit.camera.position);
-  kit.sun.position.copy(viewState.pos).addScaledVector(SUN_DIR, 150);
+  kit.sun.position.copy(viewState.pos).addScaledVector(kit.sunDir, 150);
   kit.sun.target.position.copy(viewState.pos);
   effects.update(dt, kit.camera, innerHeight);
 
   hud.update(now, s, input, assistsNow(), params);
   tutPanel.update(now, tutorial, viewState);
   gates.update(tutorial, dt, viewState.pos);
+  worldView.update(kit.camera, fogFar(kit), now / 1000);
   aim.update(now, kit.camera, viewState.pos, viewState.q, { ...cv.self, mode: weaponMode }, lockPos(cv.self.lock.targetId), !menu.open);
   if (now - lastMap > 33) { lastMap = now; drawMap(viewState, remoteViews, cv); }
   if (now - lastPanel > 500) { lastPanel = now; updatePanels(cv); }
@@ -535,10 +550,11 @@ function updatePanels(cv: CombatView): void {
 syncButtons();
 syncKeyLabels();
 applyVolumes();
+applyLook();
 syncCameraView();
 reset();
-const linkRoom = new URLSearchParams(location.search).get('room');
-if (linkRoom && SERVER_URL) { menu.setRoom(roomCode(linkRoom)); menu.show('multiplayer'); }
+const linkArgs = new URLSearchParams(location.search), linkRoom = linkArgs.get('room'), linkSky = linkArgs.get('sky');
+if (linkRoom && SERVER_URL) { menu.setRoom(roomCode(linkRoom), linkSky ? skyId(linkSky) : undefined); menu.show('multiplayer'); }
 else menu.show('help');
 if (import.meta.env.DEV) void import('./dev/tuningPanel').then(m => { tuning = m.installTuningPanel(params); if (net) tuning.lock(); });
 requestAnimationFrame(t => { last = t; frame(t); });

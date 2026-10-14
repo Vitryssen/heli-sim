@@ -7,8 +7,9 @@ import { Predictor } from './predictor';
 import { OwnView } from './ownView';
 import type { CombatEvent } from '../combat/combat';
 import type { Lock, WeaponInput } from '../combat/loadout';
-import { createTargets, placeDrone, type PracticeTarget } from '../combat/targets';
+import { createTargets, placeTarget, type PracticeTarget } from '../combat/targets';
 import type { CombatView, ProjectileView } from '../combat/view';
+import type { SkyId } from '../world/sky';
 
 export type NetStatus = 'connecting' | 'connected' | 'closed' | 'rejected';
 export type NetEvent = Extract<ServerMsg, { type: 'event' }>;
@@ -21,6 +22,8 @@ export interface NetHandlers {
   onCombat(events: CombatEvent[]): void;
   onRespawn(): void;
   onCrash(reason: string): void;
+  /** The room's time of day, on joining (the room keeps whatever its creator picked). */
+  onSky(sky: SkyId): void;
 }
 
 interface Projectile extends ProjectileView { at: number; base: Vector3 }
@@ -62,11 +65,11 @@ export class NetSession {
   private combatAt = 0;
   readonly targets: PracticeTarget[];
 
-  constructor(url: string, readonly room: string, readonly name: string, readonly state: HeliState, world: WorldQuery, layout: Layout, private h: NetHandlers) {
+  constructor(url: string, readonly room: string, readonly name: string, readonly state: HeliState, world: WorldQuery, layout: Layout, private h: NetHandlers, sky: SkyId = 'noon') {
     this.predictor = new Predictor(state, world);
     this.targets = createTargets(layout);
     this.ws = new WebSocket(url);
-    this.ws.onopen = () => this.ws.send(encode({ type: 'join', name, room, version: PROTOCOL_VERSION, paramsHash: paramsHash() }));
+    this.ws.onopen = () => this.ws.send(encode({ type: 'join', name, room, version: PROTOCOL_VERSION, paramsHash: paramsHash(), sky }));
     this.ws.onmessage = e => { const m = decodeServer(e.data); if (m) this.onMessage(m); };
     this.ws.onclose = () => {
       if (this.status === 'rejected' || this.status === 'closed') return;
@@ -103,7 +106,7 @@ export class NetSession {
   combatView(localLock: Lock): CombatView {
     const now = performance.now() / 1000;
     const mine = this.combat.get(this.id) ?? NO_COMBAT;
-    for (const t of this.targets) if (t.kind === 'drone') placeDrone(t, this.combatTime + (now - this.combatAt));
+    for (const t of this.targets) placeTarget(t, this.combatTime + (now - this.combatAt));
     const fly = (list: Projectile[]) => list.map(p => {
       const dt = Math.min(0.25, now - p.at);
       p.pos.copy(p.base).addScaledVector(p.vel, dt);
@@ -156,7 +159,7 @@ export class NetSession {
 
   private onMessage(m: ServerMsg): void {
     switch (m.type) {
-      case 'welcome': this.id = m.id; this.setStatus('connected'); break;
+      case 'welcome': this.id = m.id; this.h.onSky(m.sky); this.setStatus('connected'); break;
       case 'reject': this.status = 'rejected'; this.h.onStatus('rejected', m.reason); this.ws.close(); break;
       case 'pong': this.ping = performance.now() - m.t; break;
       case 'event': this.h.onEvent(m); break;

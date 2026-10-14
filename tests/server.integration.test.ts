@@ -3,16 +3,17 @@ import WebSocket from 'ws';
 import { startServer, type RunningServer } from '../server/index';
 import { decodeServer, encode, paramsHash, PROTOCOL_VERSION, type ServerMsg, type SnapshotMsg } from '../src/net/protocol';
 import { ALL_ON } from './harness';
+import type { SkyId } from '../src/world/sky';
 
 let server: RunningServer;
 beforeAll(async () => { server = await startServer({ port: 0 }); });
 afterAll(async () => { await server.close(); });
 
-function client(name: string, room: string, version = PROTOCOL_VERSION) {
+function client(name: string, room: string, version = PROTOCOL_VERSION, sky: SkyId = 'noon') {
   const ws = new WebSocket(`ws://localhost:${server.port}`);
   const inbox: ServerMsg[] = [];
   ws.on('message', raw => { const m = decodeServer(raw.toString()); if (m) inbox.push(m); });
-  const open = new Promise<void>(r => ws.on('open', () => { ws.send(encode({ type: 'join', name, room, version, paramsHash: paramsHash() })); r(); }));
+  const open = new Promise<void>(r => ws.on('open', () => { ws.send(encode({ type: 'join', name, room, version, paramsHash: paramsHash(), sky })); r(); }));
   return { ws, inbox, open, id: () => (inbox.find(m => m.type === 'welcome') as { id: number } | undefined)?.id };
 }
 const wait = (ms: number) => new Promise(r => setTimeout(r, ms));
@@ -83,4 +84,21 @@ test('a client with a different version is turned away', async () => {
   await c.open;
   expect(await until(() => c.inbox.some(m => m.type === 'reject'))).toBe(true);
   c.ws.close();
+});
+
+test('a room keeps the sky its creator picked, and the second pilot spawns on another pad', async () => {
+  const a = client('Alpha', 'skytest', PROTOCOL_VERSION, 'golden');
+  await a.open;
+  expect(await until(() => !!a.id())).toBe(true);
+  const b = client('Bravo', 'skytest', PROTOCOL_VERSION, 'overcast');
+  await b.open;
+  expect(await until(() => !!b.id())).toBe(true);
+  const welcome = (c: typeof a) => c.inbox.find(m => m.type === 'welcome') as { sky: SkyId };
+  expect(welcome(a).sky).toBe('golden');
+  expect(welcome(b).sky).toBe('golden');
+  const snap = () => b.inbox.filter((m): m is SnapshotMsg => m.type === 'snapshot').pop();
+  expect(await until(() => (snap()?.players.length ?? 0) === 2)).toBe(true);
+  const [pa, pb] = [a.id(), b.id()].map(id => snap()!.players.find(p => p.id === id)!.s);
+  expect(Math.hypot(pa[0] - pb[0], pa[2] - pb[2])).toBeGreaterThan(500);
+  a.ws.close(); b.ws.close();
 });

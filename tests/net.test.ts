@@ -49,18 +49,34 @@ describe('protocol', () => {
 });
 
 describe('fleet', () => {
-  const slots = spawnSlots(layout.pads[0], world.terrainH);
+  const slots = spawnSlots(layout.pads, world.terrainH);
+  const spawnPads = layout.pads.filter(p => p.spawn);
+  const at = (i: number, alive = true) => ({ pos: new Vector3(slots[i].x, slots[i].top, slots[i].z), alive });
 
-  test('spawn slots keep parked rotors well apart and sit on the ground', () => {
-    expect(slots).toHaveLength(MAX_PLAYERS);
+  test('one slot per easy pad (Base first), then a ring round Base; parked rotors well apart, on the ground', () => {
+    expect(spawnPads.map(p => p.name)).toEqual(['Base', 'Rooftop', 'Hilltop', 'FARP', 'Eastvale']);
+    expect(slots).toHaveLength(spawnPads.length + MAX_PLAYERS - 1);
+    spawnPads.forEach((p, i) => expect([slots[i].x, slots[i].z]).toEqual([p.x, p.z]));
     for (let i = 0; i < slots.length; i++) for (let j = i + 1; j < slots.length; j++)
       expect(Math.hypot(slots[i].x - slots[j].x, slots[i].z - slots[j].z)).toBeGreaterThan(2 * ROTOR_RADIUS + 5);
     for (const s of slots) expect(world.solidAt(s.x, s.top + 1, s.z)).toBe(false);
   });
 
-  test('pickSlot avoids occupied slots', () => {
-    const taken = [new Vector3(slots[0].x, 0, slots[0].z), new Vector3(slots[1].x, 0, slots[1].z)];
-    expect(pickSlot(slots, taken)).toBe(2);
+  test('an empty room starts on Base; the next pilot gets the free pad furthest from the living', () => {
+    expect(pickSlot(slots, [])).toBe(0);
+    const far = (from: number) => {
+      let best = -1, d = -1;
+      spawnPads.forEach((p, i) => { const g = Math.hypot(p.x - slots[from].x, p.z - slots[from].z); if (g > d) { d = g; best = i; } });
+      return best;
+    };
+    expect(pickSlot(slots, [at(0)])).toBe(far(0));
+    expect(layout.pads[pickSlot(slots, [at(0)])].name).not.toBe('Base');
+  });
+
+  test('pickSlot never spawns on top of anyone; a wreck still blocks its pad', () => {
+    expect(pickSlot(slots, spawnPads.map((_, i) => at(i)))).toBeGreaterThanOrEqual(spawnPads.length);   // every pad taken: the Base ring
+    const farthest = pickSlot(slots, [at(0)]);
+    expect(pickSlot(slots, [at(0), at(farthest, false)])).not.toBe(farthest);
   });
 
   test('touching airframes and overlapping rotors are detected', () => {

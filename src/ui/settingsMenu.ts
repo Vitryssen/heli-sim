@@ -4,8 +4,9 @@ import type { Prefs } from '../game/prefs';
 import type { AssistFlags } from '../sim/state';
 import type { Lesson } from '../tutorial/lessons';
 import type { Volumes } from '../audio/combatSound';
+import { SKIES, SKY_LABEL, skyId, type SkyId } from '../world/sky';
 
-export type Tab = 'help' | 'controls' | 'assists' | 'mouse' | 'sound' | 'multiplayer' | 'tutorial';
+export type Tab = 'help' | 'controls' | 'assists' | 'mouse' | 'sound' | 'graphics' | 'multiplayer' | 'tutorial';
 
 export interface MultiplayerView {
   configured: boolean;
@@ -22,7 +23,8 @@ export interface MenuHooks {
   onFly(): void;          // fullscreen + keyboard lock
   onClose(): void;
   multiplayer(): MultiplayerView;
-  onJoin(room: string, name: string): void;
+  /** `sky` only matters if the room is new: an existing room keeps its own. */
+  onJoin(room: string, name: string, sky: SkyId): void;
   onLeave(): void;
   defaultName(): string;
   tutorial(): { lessons: Lesson[]; done: string[]; current: Lesson | null };   // current: loaded, flying or finished
@@ -32,6 +34,10 @@ export interface MenuHooks {
   soundOn(): boolean;
   onSoundToggle(): void;
   onVolume(v: Volumes): void;
+  /** Your sky setting, and the room's while you're in one (it overrides yours). */
+  graphics(): { high: boolean; sky: SkyId; roomSky: SkyId | null };
+  onQuality(high: boolean): void;
+  onSky(sky: SkyId): void;
 }
 
 const ASSIST_ROWS: { k: keyof AssistFlags; label: string; detail: string }[] = [
@@ -41,7 +47,7 @@ const ASSIST_ROWS: { k: keyof AssistFlags; label: string; detail: string }[] = [
   { k: 'turnCoord', label: 'Turn coordination', detail: 'Yaws the nose into banked turns above about 30 km/h.' },
 ];
 
-/** Settings overlay: help, key rebinding, assists, mouse, sound, multiplayer and the tutorial. Pauses the game while open. */
+/** Settings overlay: help, key rebinding, assists, mouse, sound, graphics, multiplayer and the tutorial. Pauses the game while open. */
 export class SettingsMenu {
   open = false;
   private root = document.getElementById('menu')!;
@@ -49,8 +55,10 @@ export class SettingsMenu {
   private tab: Tab = 'help';
   private note = '';
   private roomDraft = '';
+  private skyDraft: SkyId;
 
   constructor(private bindings: Bindings, private keyboard: Keyboard, private prefs: Prefs, private hooks: MenuHooks) {
+    this.skyDraft = prefs.sky;
     for (const b of this.root.querySelectorAll<HTMLButtonElement>('[data-tab]')) b.onclick = () => this.show(b.dataset.tab as Tab);
     document.getElementById('menuFly')!.onclick = () => this.hooks.onFly();
     document.getElementById('menuWindow')!.onclick = () => this.close();
@@ -77,8 +85,8 @@ export class SettingsMenu {
 
   toggle(): void { if (this.open) this.close(); else this.show(); }
 
-  /** Prefill the room field (from a ?room= link). */
-  setRoom(room: string): void { this.roomDraft = room; }
+  /** Prefill the room field and its time of day (from a ?room= link). */
+  setRoom(room: string, sky?: SkyId): void { this.roomDraft = room; if (sky) this.skyDraft = sky; }
 
   refresh(): void { if (this.open) this.render(); }
 
@@ -116,6 +124,8 @@ export class SettingsMenu {
       this.renderTutorial();
     } else if (this.tab === 'sound') {
       this.renderSound();
+    } else if (this.tab === 'graphics') {
+      this.renderGraphics();
     } else {
       this.body.innerHTML = `
         <label class="range"><span>Sensitivity <output id="sensOut">${Math.round(this.prefs.sensitivity * 100)}%</output></span>
@@ -154,6 +164,25 @@ export class SettingsMenu {
     document.getElementById('sndReset')!.onclick = () => { for (const [k] of rows) v[k] = 1; this.hooks.onVolume(v); this.render(); };
   }
 
+  private renderGraphics(): void {
+    const g = this.hooks.graphics(), shown = g.roomSky ?? g.sky;
+    const SKY_NOTE: Record<SkyId, string> = { noon: 'High sun, long view.', golden: 'Low sun from the west, long shadows across the valleys.', overcast: 'Flat grey light; the haze closes in to about 900 m, so you see others late.' };
+    this.body.innerHTML = `
+      <h3>Quality</h3>
+      <div class="lessons">
+        <button class="tg" id="gfxHigh" aria-pressed="${g.high}"><span class="led"></span>High</button><span>Sharp on high-density screens, tree shadows, full terrain detail out to 1 km.</span>
+        <button class="tg" id="gfxLow" aria-pressed="${!g.high}"><span class="led"></span>Low</button><span>For laptops: one pixel per pixel, no tree shadows, less terrain detail and trees drawn to about 1.1 km.</span>
+      </div>
+      <h3>Time of day</h3>
+      ${g.roomSky ? `<p class="note">Set by the room: ${SKY_LABEL[g.roomSky]}. Everyone in a room flies in the same weather.</p>` : ''}
+      <div class="lessons">${SKIES.map(id => `
+        <button class="tg" data-sky="${id}" aria-pressed="${shown === id}" ${g.roomSky ? 'disabled' : ''}><span class="led"></span>${SKY_LABEL[id]}</button><span>${SKY_NOTE[id]}</span>`).join('')}
+      </div>`;
+    document.getElementById('gfxHigh')!.onclick = () => { this.hooks.onQuality(true); this.render(); };
+    document.getElementById('gfxLow')!.onclick = () => { this.hooks.onQuality(false); this.render(); };
+    for (const b of this.body.querySelectorAll<HTMLButtonElement>('[data-sky]')) b.onclick = () => { this.hooks.onSky(b.dataset.sky as SkyId); this.render(); };
+  }
+
   private renderTutorial(): void {
     const t = this.hooks.tutorial(), mp = this.hooks.multiplayer();
     const inRoom = mp.status === 'connecting' || mp.status === 'connected';
@@ -177,7 +206,8 @@ export class SettingsMenu {
       return;
     }
     if (mp.status === 'connecting' || mp.status === 'connected') {
-      const link = `${location.origin}${location.pathname}?room=${encodeURIComponent(mp.room)}`;
+      const sky = this.hooks.graphics().roomSky;
+      const link = `${location.origin}${location.pathname}?room=${encodeURIComponent(mp.room)}${sky ? `&sky=${sky}` : ''}`;
       this.body.innerHTML = `
         <p>${mp.status === 'connecting' ? 'Connecting to' : 'Flying in'} room <b>${esc(mp.room)}</b>${mp.status === 'connected' ? ` · ping ${Math.round(mp.ping)} ms` : ''}</p>
         <div class="menu-row"><input class="field" id="mpLink" readonly value="${esc(link)}" aria-label="Room link"><button class="tg" id="mpCopy">Copy link</button></div>
@@ -196,17 +226,21 @@ export class SettingsMenu {
       <p>Fly in the same world as your friends. Create a room and send them the link, or type the code of a room someone shared. Up to 8 pilots per room.</p>
       <label class="range"><span>Your name</span><input class="field" id="mpName" maxlength="16" value="${esc(this.hooks.defaultName())}"></label>
       <label class="range"><span>Room code</span><input class="field" id="mpRoom" maxlength="24" placeholder="e.g. friday-flight" value="${esc(this.roomDraft)}"></label>
+      <label class="range"><span>Time of day <small>for a new room; an existing room keeps its own</small></span>
+        <select class="field" id="mpSky">${SKIES.map(id => `<option value="${id}" ${id === this.skyDraft ? 'selected' : ''}>${SKY_LABEL[id]}</option>`).join('')}</select></label>
       <div class="menu-row"><button class="go" id="mpJoin">Join room</button><button class="tg" id="mpCreate">Create new room</button></div>`;
     const name = () => (document.getElementById('mpName') as HTMLInputElement).value;
     const roomField = document.getElementById('mpRoom') as HTMLInputElement;
     roomField.oninput = () => { this.roomDraft = roomField.value; };
-    const join = () => { if (roomField.value.trim()) this.hooks.onJoin(roomField.value, name()); else roomField.focus(); };
+    const skyField = document.getElementById('mpSky') as HTMLSelectElement;
+    skyField.onchange = () => { this.skyDraft = skyId(skyField.value); };
+    const join = () => { if (roomField.value.trim()) this.hooks.onJoin(roomField.value, name(), this.skyDraft); else roomField.focus(); };
     document.getElementById('mpJoin')!.onclick = join;
     for (const id of ['mpName', 'mpRoom']) (document.getElementById(id) as HTMLInputElement).onkeydown = e => { if (e.key === 'Enter') join(); };
     document.getElementById('mpCreate')!.onclick = () => {
       const code = Array.from(crypto.getRandomValues(new Uint8Array(4)), b => 'abcdefghjkmnpqrstuvwxyz23456789'[b % 31]).join('') + '-' + Math.floor(10 + Math.random() * 90);
       this.roomDraft = code;
-      this.hooks.onJoin(code, name());
+      this.hooks.onJoin(code, name(), this.skyDraft);
     };
   }
 

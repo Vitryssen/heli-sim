@@ -3,12 +3,13 @@ import { canvasTexture } from './scene';
 
 const N = 180;
 
-/** Rotor-wash dust: particles thrown outward from the ground under the hub. */
+/** Rotor-wash dust: particles thrown outward from the ground under the hub (spray over water). */
 export class Dust {
   private pos = new Float32Array(N * 3).fill(-9999);
   private vel = new Float32Array(N * 3);
   private life = new Float32Array(N);
   private geo = new THREE.BufferGeometry();
+  private mat: THREE.PointsMaterial;
 
   constructor(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
     this.geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
@@ -17,14 +18,16 @@ export class Dust {
       gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
       g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
     });
-    const pts = new THREE.Points(this.geo, new THREE.PointsMaterial({ color: 0xd8cba8, size: 1.3, transparent: true, opacity: 0.38, depthWrite: false, map: sprite }));
+    this.mat = new THREE.PointsMaterial({ color: 0xd8cba8, size: 1.3, transparent: true, opacity: 0.38, depthWrite: false, map: sprite });
+    const pts = new THREE.Points(this.geo, this.mat);
     pts.frustumCulled = false;
     scene.add(pts);
   }
 
-  /** `wash` 0..1 is how hard the downwash hits the ground at (hx, groundY, hz). */
-  update(dt: number, hx: number, hz: number, groundY: number, wash: number): void {
+  /** `wash` 0..1 is how hard the downwash hits the surface at (hx, groundY, hz); `water` makes it white spray. */
+  update(dt: number, hx: number, hz: number, groundY: number, wash: number, water = false): void {
     const { pos, vel, life } = this;
+    if (wash > 0.05) this.mat.color.setHex(water ? 0xe6eef0 : 0xd8cba8);
     let spawn = Math.round(wash * 5);
     for (let i = 0; i < N; i++) {
       const j = i * 3;

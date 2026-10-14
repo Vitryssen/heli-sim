@@ -1,9 +1,10 @@
 import { Quaternion, Vector3 } from 'three';
 import { createState, placeOnGround, type HeliState } from '../src/sim/state';
-import { crashCheck } from '../src/sim/collisions';
+import { crashCheck, EDGE_GRACE, edgeTimer } from '../src/sim/collisions';
 import { fleetContacts, MAX_PLAYERS, pickSlot, spawnSlots, type SpawnSlot } from '../src/sim/fleet';
 import type { WorldQuery } from '../src/world/query';
 import type { Layout } from '../src/world/layout';
+import type { SkyId } from '../src/world/sky';
 import { Combat, type Pose } from '../src/combat/combat';
 import { combatParams } from '../src/combat/params';
 import { NO_WEAPON, type WeaponInput } from '../src/combat/loadout';
@@ -24,6 +25,7 @@ export interface Player {
   starved: number;        // ticks in a row with no fresh input
   respawns: number;
   reason: string | null;  // why the current airframe crashed
+  outside: number;        // seconds past the map's warning line
 }
 
 const MAX_QUEUE = 8;       // inputs buffered per player; older ones are dropped so lag can't pile up
@@ -46,8 +48,8 @@ export class Room {
   private landings: Landings;
   private poses = new Map<number, Pose>();
 
-  constructor(readonly name: string, private world: WorldQuery, layout: Layout) {
-    this.slots = spawnSlots(layout.pads[0], world.terrainH);
+  constructor(readonly name: string, private world: WorldQuery, layout: Layout, readonly sky: SkyId = 'noon') {
+    this.slots = spawnSlots(layout.pads, world.terrainH);
     this.combat = new Combat(world, layout);
     this.landings = new Landings(layout.pads);
   }
@@ -57,11 +59,11 @@ export class Room {
 
   join(name: string, peer: Peer): Player | null {
     if (this.full) return null;
-    const p: Player = { id: nextId++, name, peer, state: createState(), queue: [], last: null, lastSeq: 0, starved: 0, respawns: 0, reason: null };
+    const p: Player = { id: nextId++, name, peer, state: createState(), queue: [], last: null, lastSeq: 0, starved: 0, respawns: 0, reason: null, outside: 0 };
     this.spawn(p);
     this.players.set(p.id, p);
     this.combat.add(p.id, name, p.state);
-    peer.send({ type: 'welcome', id: p.id, tick: this.tick, room: this.name });
+    peer.send({ type: 'welcome', id: p.id, tick: this.tick, room: this.name, sky: this.sky });
     this.broadcast({ type: 'event', kind: 'join', id: p.id, name: p.name });
     peer.send(this.snapshot());
     return p;
@@ -106,6 +108,8 @@ export class Room {
         const reason = crashCheck(p.state, this.world);
         if (reason) this.crash(p, reason);
       }
+      p.outside = edgeTimer(p.outside, p.state, NET_DT);
+      if (p.outside >= EDGE_GRACE) this.crash(p, 'Left the map');
     }
     const list = [...this.players.values()];
     for (const [i, j] of fleetContacts(list.map(p => p.state))) {
@@ -173,10 +177,11 @@ export class Room {
   }
 
   private spawn(p: Player): void {
-    const others = [...this.players.values()].filter(o => o !== p).map(o => o.state.pos);
+    const others = [...this.players.values()].filter(o => o !== p).map(o => ({ pos: o.state.pos, alive: !o.state.crashed }));
     const slot = this.slots[pickSlot(this.slots, others)];
     placeOnGround(p.state, slot.x, slot.top, slot.z, slot.heading);
     p.reason = null;
+    p.outside = 0;
   }
 
   private broadcast(msg: ServerMsg): void { for (const p of this.players.values()) p.peer.send(msg); }

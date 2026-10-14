@@ -24,7 +24,7 @@ npm run server -- --lag 60 --jitter 20  # simulate a 120 ms round trip with jitt
 npm run dev                             # open two windows on http://localhost:5173/heli-sim/?room=test
 ```
 
-In the game: **Settings → Multiplayer** to create a room and copy its link. Rooms are a free-for-all deathmatch: kills and deaths show in the player list, destroyed aircraft respawn after 5 s (`R` respawns at once), and colliding with another aircraft destroys both.
+In the game: **Settings → Multiplayer** to create a room and copy its link. Rooms are a free-for-all deathmatch: kills and deaths show in the player list, destroyed aircraft respawn after 5 s (`R` respawns at once), and colliding with another aircraft destroys both. You spawn on one of the five easy pads (Base, Rooftop, Hilltop, FARP, Eastvale): the free one furthest from the other living pilots, so an empty room starts on Base. A room keeps the time of day its creator picked; the room link carries it.
 
 **Deploying the server (Fly.io):**
 
@@ -42,10 +42,25 @@ After that, server changes deploy automatically (`.github/workflows/deploy-serve
 - **Missiles:** 4 carried. Hold a target in the ±6° seeker for 1.5 s to lock, then fire. They cruise at 180 m/s using proportional navigation with a 20 g limit, a 5 m proximity fuse, 75 % damage plus splash, and self-destruct after 12 s.
 - **Flares:** 24, dropped in salvos of 6 (four salvos). A salvo ripples out over 0.4 s, alternating left and right. Each flare inside a missile's seeker has a 30 % chance to decoy it, so a salvo breaks most locks.
 - **Rearm and repair** by sitting 5 s on any H pad.
-- **Practice targets:** six trucks around the town and Hilltop, and three drones flying figure-8s. They respawn after 20 s.
-- **Minimap:** heading-up, range 500 m / 1 km / 2 km (`M`). Shows pilots, targets and missiles.
+- **Practice targets:** six parked trucks around the town and Hilltop, four trucks driving the East, West and South roads (about 40 km/h), and three drones flying figure-8s. They respawn after 20 s; a destroyed truck burns where it stopped.
+- **Cover:** terrain, buildings, props and trees stop rounds and missiles and break a missile lock. Drop into a valley or behind a tree line to shake a lock.
+- **Minimap:** heading-up, range 500 m / 1 km / 2 km (`M`). Shows the terrain, river, forests, roads, power lines, pilots, targets and missiles, and the map-edge warning line.
 
 The old landing time trial and the target-pad beacon are gone; landings are still graded.
+
+## World
+
+`src/world/` is pure data (no DOM) shared by the browser and the server: `terrain.ts` (height), `layout.ts` (everything placed on it, seeded so every client and the server agree), `world.ts` (collision queries over a 32 m grid). `meshes.ts` draws it. Covered by `tests/world.test.ts`.
+
+- **Core:** inside 700 m of the town–Base area the map is exactly the original: Base, the town, Hilltop and every tutorial route.
+- **Outer ring:** rugged upland with 120–190 m ridgelines and dry valleys cut 30–50 m deep, which are the low routes out of the core. A river runs through a gorge round the west and south; touching the water is a crash ("Ditched"), and rotor wash over it throws spray. The map edge rises into a 250–400 m mountain rim.
+- **Places:** the village of Eastvale (with a pad by the main street, and a tight **Tower** pad boxed in by taller towers), a **FARP** with sandbags and fuel bladders, a forest **Clearing** ringed by tall pines, an 8° **Slope** pad, two hamlets, and a radio mast on the north ridge with a blinking light. Every H pad rearms; only Base, Rooftop, Hilltop, FARP and Eastvale are spawn points.
+- **Roads:** one network: a ring road round Base where every road out meets (no road runs onto the pad), streets through the town, east to Eastvale, west past the FARP over a bridge to a hamlet, south over a second bridge to a farm. You can fly under both bridges.
+- **Power grid:** a main line from the south-east mountains to a substation by the East road, then lines along the roads to Eastvale, the FARP and the west hamlet, the south farm and the radio mast, through cleared corridors in the forests. Pylons are solid; the wires are only drawn.
+- **Buildings:** glass offices over 22 m, plastered apartments with balconies and shopfronts below that, corrugated sheds with sliding doors. Every roof has a solid parapet; roofs without a pad carry a stair housing, AC units, water tanks, antennas and vents, all solid. The drawn detail is in `src/world/detail.ts`; collisions still use the plain boxes.
+- **Forests:** about 5,000 pines and broadleaf trees in patches with open fields between. Trees are solid and give cover.
+- **Map edge:** past 2.2 km on either axis a "Turn back" countdown runs; stay out 10 s and you're destroyed.
+- **Graphics (Settings → Graphics):** High or Low quality (Low: one pixel per pixel, no tree shadows, less terrain detail and a shorter tree range), and the time of day: clear noon, golden hour, or overcast with haze to about 900 m. The weather is visual only; the flight model never sees it.
 
 ## Tutorial
 

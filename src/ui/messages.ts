@@ -20,6 +20,9 @@ export class Messages {
 
   clear(): void { this.el.classList.remove('show'); this.timer = 0; this.sticky = false; this.busyUntilIdle = false; }
 
+  /** Title of the banner last shown. */
+  get showing(): string { return this.title.textContent ?? ''; }
+
   /** True while a timed banner is showing (lets low-priority notices wait their turn). */
   get busy(): boolean { return this.busyUntilIdle; }
 

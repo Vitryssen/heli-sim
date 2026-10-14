@@ -6,9 +6,13 @@ export const MAX_PLAYERS = 8;
 
 export interface SpawnSlot { x: number; z: number; top: number; heading: number }
 
-/** Slot 0 is the Base pad; the rest ring the apron 22 m out, so parked rotor discs are ≥ 19 m apart. */
-export function spawnSlots(base: { x: number; z: number; top: number }, terrainH: (x: number, z: number) => number): SpawnSlot[] {
-  const slots: SpawnSlot[] = [{ x: base.x, z: base.z, top: base.top, heading: 0 }];
+/**
+ * One slot on each spawn pad (Base first), then a ring round the Base apron 22 m out for when every
+ * pad is taken; parked rotor discs there are ≥ 19 m apart.
+ */
+export function spawnSlots(pads: readonly { x: number; z: number; top: number; spawn: boolean }[], terrainH: (x: number, z: number) => number): SpawnSlot[] {
+  const slots: SpawnSlot[] = pads.filter(p => p.spawn).map(p => ({ x: p.x, z: p.z, top: p.top, heading: 0 }));
+  const base = pads[0];
   for (let i = 0; i < MAX_PLAYERS - 1; i++) {
     const a = (i / (MAX_PLAYERS - 1)) * Math.PI * 2;
     const x = base.x + Math.sin(a) * 22, z = base.z - Math.cos(a) * 22;
@@ -17,15 +21,23 @@ export function spawnSlots(base: { x: number; z: number; top: number }, terrainH
   return slots;
 }
 
-/** First slot with nobody within 12 m; otherwise the one furthest from everyone. */
-export function pickSlot(slots: SpawnSlot[], occupied: Vector3[]): number {
-  let best = 0, bestGap = -1;
+export interface Pilot { pos: Vector3; alive: boolean }
+
+/**
+ * The free slot (nobody within 12 m) furthest from every living pilot; ties go to the earlier slot,
+ * so an empty room starts on Base. If every slot is taken, the one furthest from anyone.
+ */
+export function pickSlot(slots: SpawnSlot[], others: Pilot[]): number {
+  let best = -1, bestGap = -1, fallback = 0, fallbackGap = -1;
   for (let i = 0; i < slots.length; i++) {
-    const gap = occupied.reduce((m, p) => Math.min(m, Math.hypot(p.x - slots[i].x, p.z - slots[i].z)), Infinity);
-    if (gap > 12) return i;
+    const d = (p: Pilot) => Math.hypot(p.pos.x - slots[i].x, p.pos.z - slots[i].z);
+    const nearest = others.reduce((m, p) => Math.min(m, d(p)), Infinity);
+    if (nearest > fallbackGap) { fallbackGap = nearest; fallback = i; }
+    if (nearest <= 12) continue;
+    const gap = others.reduce((m, p) => (p.alive ? Math.min(m, d(p)) : m), Infinity);
     if (gap > bestGap) { bestGap = gap; best = i; }
   }
-  return best;
+  return best >= 0 ? best : fallback;
 }
 
 /** Body collision spheres (body axes): cabin, boom, tail. Also the hit boxes for weapons. */
